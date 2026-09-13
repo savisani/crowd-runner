@@ -1,0 +1,25 @@
+{
+  "name": "crowd-runner",
+  "version": "1.0.0",
+  "description": "3D Hyper-casual endless runner - crowd matching game",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "cap:init": "npx cap init crowd-runner com.game.crowdrunner --web-dir dist",
+    "cap:add": "npx cap add android",
+    "cap:sync": "npx cap sync",
+    "cap:open": "npx cap open android",
+    "android": "npm run build && npm run cap:sync && npm run cap:open"
+  },
+  "dependencies": {
+    "three": "^0.170.0",
+    "@capacitor/core": "^6.2.0",
+    "@capacitor/android": "^6.2.0",
+    "@capacitor/cli": "^6.2.0"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}

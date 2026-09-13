@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#1a0a2e" />
+  <title>Crowd Runner</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div id="game-container">
+    <canvas id="game-canvas"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div id="hud-top">
+        <div id="streak-display">
+          <div id="streak-label">STREAK</div>
+          <div id="streak-value">0</div>
+          <div id="streak-progress-container">
+            <div id="streak-progress-track">
+              <div id="streak-progress-fill"></div>
+              <div id="streak-progress-glow"></div>
+            </div>
+            <div id="streak-progress-markers">
+              <span class="streak-marker" data-tier="5"></span>
+              <span class="streak-marker" data-tier="10"></span>
+            </div>
+            <div id="streak-tier-label">1 / 10</div>
+          </div>
+        </div>
+        <div id="crowd-display">
+          <div id="crowd-label">CROWD</div>
+          <div id="crowd-value">0</div>
+        </div>
+      </div>
+      <div id="shape-indicator">
+        <div id="shape-icon"></div>
+      </div>
+    </div>
+
+    <!-- Start Screen -->
+    <div id="start-screen">
+      <div id="start-content">
+        <h1 id="game-title">CROWD<br/>RUNNER</h1>
+        <div id="shape-preview">
+          <div class="preview-shape circle"></div>
+          <div class="preview-shape triangle"></div>
+          <div class="preview-shape square"></div>
+        </div>
+        <div id="instructions">
+          <div class="instruction-row">
+            <span class="swipe-icon">&#8592; &#8594;</span>
+            <span>Swipe to switch lanes</span>
+          </div>
+          <div class="instruction-row">
+            <span class="swipe-icon">&#8593;</span>
+            <span>Swipe up to jump</span>
+          </div>
+          <div class="instruction-row">
+            <span class="tap-icon">&#9679;</span>
+            <span>Tap to change shape</span>
+          </div>
+        </div>
+        <button id="start-btn">TAP TO PLAY</button>
+      </div>
+    </div>
+
+    <!-- Game Over Screen -->
+    <div id="gameover-screen" class="hidden">
+      <div id="gameover-content">
+        <h2 id="gameover-title">GAME OVER</h2>
+        <div id="final-stats">
+          <div class="stat-row">
+            <span class="stat-label">Best Streak</span>
+            <span id="final-streak" class="stat-value">0</span>
+          </div>
+          <div class="stat-row">
+            <span class="stat-label">Crowd Size</span>
+            <span id="final-crowd" class="stat-value">0</span>
+          </div>
+        </div>
+        <button id="restart-btn">TAP TO RETRY</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
