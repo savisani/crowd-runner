@@ -3,6 +3,12 @@ export class Audio {
     this.ctx = null;
     this.enabled = true;
     this.initialized = false;
+    // Music properties
+    this.musicBuffer = null;
+    this.musicSource = null;
+    this.musicGain = null;
+    this.musicVolume = 0.5;
+    this.isMusicPlaying = false;
   }
 
   init() {
@@ -10,6 +16,11 @@ export class Audio {
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.initialized = true;
+      // Create a gain node for music volume control
+      this.musicGain = this.ctx.createGain();
+      this.musicGain.connect(this.ctx.destination);
+      // Generate a simple music buffer (2 seconds of a repeating melody)
+      this._generateMusicBuffer();
     } catch (e) {
       this.enabled = false;
     }
@@ -79,6 +90,22 @@ export class Audio {
       setTimeout(() => this._playTone(1319, 0.25, 'sine', 0.25), 320);
       setTimeout(() => this._playTone(1568, 0.3, 'sine', 0.2), 420);
       setTimeout(() => this._playTone(2093, 0.35, 'sine', 0.15), 520);
+    } else if (streak === 20) {
+      this._playTone(523, 0.2, 'sine', 0.4);
+      setTimeout(() => this._playTone(659, 0.2, 'sine', 0.4), 100);
+      setTimeout(() => this._playTone(784, 0.2, 'sine', 0.4), 200);
+      setTimeout(() => this._playTone(1047, 0.25, 'sine', 0.35), 300);
+      setTimeout(() => this._playTone(1319, 0.3, 'sine', 0.3), 400);
+      setTimeout(() => this._playTone(1568, 0.35, 'sine', 0.25), 500);
+      setTimeout(() => this._playTone(2093, 0.4, 'sine', 0.2), 600);
+    } else if (streak === 30) {
+      this._playTone(523, 0.25, 'sine', 0.45);
+      setTimeout(() => this._playTone(659, 0.25, 'sine', 0.45), 100);
+      setTimeout(() => this._playTone(784, 0.25, 'sine', 0.45), 200);
+      setTimeout(() => this._playTone(1047, 0.3, 'sine', 0.4), 300);
+      setTimeout(() => this._playTone(1319, 0.35, 'sine', 0.35), 400);
+      setTimeout(() => this._playTone(1568, 0.4, 'sine', 0.3), 500);
+      setTimeout(() => this._playTone(2093, 0.45, 'sine', 0.25), 600);
     }
   }
 
@@ -113,5 +140,71 @@ export class Audio {
     setTimeout(() => this._playTone(1100, 0.1, 'sine', 0.25), 80);
     setTimeout(() => this._playTone(1320, 0.15, 'sine', 0.2), 160);
     setTimeout(() => this._playTone(1760, 0.2, 'sine', 0.15), 240);
+  }
+
+  _generateMusicBuffer() {
+    const sampleRate = this.ctx.sampleRate;
+    const length = sampleRate * 2; // 2 seconds
+    this.musicBuffer = this.ctx.createBuffer(1, length, sampleRate);
+    const data = this.musicBuffer.getChannelData(0);
+    for (let i = 0; i < length; i++) {
+      const t = i / sampleRate;
+      // Create a simple melody: C4 for 0.5s, E4 for 0.5s, G4 for 0.5s, C5 for 0.5s
+      const noteIndex = Math.floor((i / (sampleRate * 0.5)) % 4);
+      const freq = [261.63, 329.63, 392.00, 523.25][noteIndex];
+      data[i] = Math.sin(2 * Math.PI * freq * t) * 0.2;
+    }
+  }
+
+  startMusic() {
+    if (!this.enabled || !this.ctx || this.isMusicPlaying) return;
+    this.isMusicPlaying = true;
+    this._playMusicLoop();
+  }
+
+  _playMusicLoop() {
+    if (!this.isMusicPlaying) return;
+    // Create a buffer source
+    this.musicSource = this.ctx.createBufferSource();
+    this.musicSource.buffer = this.musicBuffer;
+    this.musicSource.loop = true;
+    // Connect through the gain node
+    this.musicSource.connect(this.musicGain);
+    this.musicGain.connect(this.ctx.destination);
+    // Start the source
+    this.musicSource.start(0);
+  }
+
+  stopMusic() {
+    this.isMusicPlaying = false;
+    if (this.musicSource) {
+      this.musicSource.stop(0);
+      this.musicSource = null;
+    }
+  }
+
+  setMusicVolume(volume) {
+    this.musicVolume = Math.max(0, Math.min(1, volume));
+    if (this.musicGain) {
+      this.musicGain.gain.setValueAtTime(this.musicVolume, this.ctx.currentTime);
+    }
+  }
+
+  updateMusicIntensity(streak) {
+    // Adjust music volume based on streak
+    let volume = 0.2; // base volume
+    if (streak >= 5) {
+      volume = 0.25;
+    }
+    if (streak >= 10) {
+      volume = 0.3;
+    }
+    if (streak >= 20) {
+      volume = 0.4;
+    }
+    if (streak >= 30) {
+      volume = 0.5; // max intensity
+    }
+    this.setMusicVolume(volume);
   }
 }

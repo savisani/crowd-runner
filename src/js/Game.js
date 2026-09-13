@@ -122,6 +122,7 @@ export class Game {
 
   start() {
     this.audio.init();
+    this.audio.startMusic();
     this.ui.hideStartScreen();
     this.ui.showHUD();
     this.ui.updateShapeIndicator(this.player.currentShape);
@@ -153,6 +154,7 @@ export class Game {
     this.ui.updateCrowd(0);
     this.ui.updateShapeIndicator(this.player.currentShape);
     this.state = 'playing';
+    this.audio.startMusic();
     this.lastTime = performance.now();
   }
 
@@ -293,7 +295,7 @@ export class Game {
     this.audio.playMatch(this.streak);
     this.audio.playPop();
 
-    if (this.streak === 5 || this.streak === 10) {
+    if (this.streak === 5 || (this.streak >= 10 && this.streak % 10 === 0)) {
       this.audio.playMilestone(this.streak);
     }
 
@@ -445,6 +447,7 @@ export class Game {
   }
 
   _gameOver() {
+    this.audio.stopMusic();
     this.state = 'gameover';
     this.ui.hideHUD();
     this.ui.showGameOver(this.bestStreak, this.crowd.getCount());
@@ -505,6 +508,7 @@ export class Game {
         true
       );
       this.effects.updateLighting(this.streak, this.crowd.getCount());
+      this.effects.updateMusicIntensity(this.streak);
       this.effects.updateBackground(this.player.mesh.position.z);
       this.effects.updateFlowAura(this.player.mesh, dt);
       this._updateDebugOverlay();

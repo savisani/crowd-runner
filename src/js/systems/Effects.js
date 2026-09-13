@@ -1,6 +1,3 @@
-import * as THREE from 'three';
-import { CONFIG } from '../engine/Config.js';
-
 export class Effects {
   constructor(scene) {
     this.scene = scene;
@@ -97,14 +94,18 @@ export class Effects {
         p.active = true;
         p.life = 0;
         p.maxLife = 60 + Math.random() * 60; // 1-2 seconds
-        p.x = x + (Math.random() - 0.5) * 0.8;
-        p.y = y + Math.random() * 1.0;
-        p.z = z + (Math.random() - 0.5) * 0.8;
+        // Spawn in a ring around the center to avoid the center
+        const radius = 0.5 + Math.random() * 0.5; // 0.5 to 1.0
         const angle = Math.random() * Math.PI * 2;
+        p.x = x + Math.cos(angle) * radius;
+        p.z = z + Math.sin(angle) * radius;
+        // Y distribution: slightly above and below the player
+        p.y = y + (Math.random() * 0.8 - 0.4); // -0.4 to +0.4
+        // Velocity: outward and upward
         const speed = 0.03 + Math.random() * 0.05;
-        p.vx = Math.cos(angle) * speed;
-        p.vy = 0.02 + Math.random() * 0.04;
-        p.vz = Math.sin(angle) * speed;
+        p.vx = Math.cos(angle) * speed * 0.5; // slightly reduced outward speed
+        p.vy = 0.02 + Math.random() * 0.04; // upward bias
+        p.vz = Math.sin(angle) * speed * 0.5;
         p.mesh.material.color.setRGB(r, g, b);
         p.mesh.material.opacity = 0.8;
         p.mesh.scale.setScalar(0.5 + Math.random() * 0.5);
@@ -424,7 +425,7 @@ export class Effects {
       p.y = y + Math.random() * 1.2;
       p.z = z + (Math.random() - 0.5) * 1.0;
       const angle = (i / count) * Math.PI * 2;
-      const speed = 0.12 + Math.random() * 0.08;
+      const speed = 0.12 + Math.random() * 0.15;
       p.vx = Math.cos(angle) * speed;
       p.vy = 0.1 + Math.random() * 0.15;
       p.vz = Math.sin(angle) * speed;

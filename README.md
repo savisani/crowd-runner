@@ -38,6 +38,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 | **Perfect Combo** | Chain perfect matches for escalating rewards |
 | **Crowd Formations** | Milestone crowd sizes trigger special formations |
 | **Rival Crowd** | Compete against AI runner with their own crowd |
+| **Dynamic Music** | Background music intensifies with streak (5, 10, 20, 30+) |
 
 ---
 
@@ -68,6 +69,8 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Visuals:** Runner mesh (same scale as player), red glow ring, small crowd in V formation
 - **Behavior:** Auto-runs ahead of player, starts interaction when player approaches, requires perfect match sequence to defeat
 - **Rewards:** Defeat grants portion of rival's crowd (up to 3 members)
+- **Visuals:** Red glow ring distinguishes rival; small crowd in V formation
+- **Rarity:** Rare encounter — adds tension without overwhelming
 
 ### Collision System
 - **File:** `src/js/systems/Collision.js`
@@ -168,6 +171,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Visuals:**
   - 3 pulsing gold rings around player (expanding/contracting)
   - Continuous gold particle stream (12 particles, 1-2s lifetime)
+  - **Fixed center flame issue:** Particles now spawn in a ring around the player to avoid the center, keeping the player's shape clearly visible
   - Player shape/color **unchanged** — always clearly identifiable
 - **UI:** "FLOW!" activation popup
 - **Gameplay:** No mechanical changes — purely visual celebration
@@ -189,6 +193,35 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Defeat Reward:** Up to 3 crowd members join player (based on rival crowd size)
 - **Visuals:** Red glow ring distinguishes rival; small crowd in V formation
 - **Rarity:** Rare encounter — adds tension without overwhelming
+
+### Audio System
+- **File:** `src/js/systems/Audio.js`
+- **Sound Effects:** Procedurally generated tones for matches, mismatches, jumps, switches, etc.
+- **Background Music:** 
+  - Generates a simple melodic loop (C4-E4-G4-C5) that loops seamlessly
+  - Volume controlled separately from SFX volume
+  - Intensity increases with streak (5, 10, 20, 30+) via volume scaling
+  - Starts after game initialization (first user interaction)
+  - Respects browser audio restrictions (requires user interaction to start)
+  - Music and SFX volumes are independent in the HUD/settings
+
+### Effects System
+- **File:** `src/js/systems/Effects.js`
+- **Particles:** Match, mismatch, crash, perfect, streak, perfect catch, near miss, flow, rival
+- **Trails:** Following trails behind the player
+- **Screen Shake:** Camera punch effects for streaks and perfect combos
+- **Lighting Pulse:** Global lighting intensification on streaks
+- **Flow Aura:** As described above (with fixed center)
+- **Background:** Scrolling background objects
+
+### UI System
+- **File:** `src/js/ui/UI.js`
+- **HUD:** Displays score, streak, crowd size, and current shape
+- **Menus:** Start screen, game over screen
+- **Pop-ups:** Streak updates, near miss, perfect combo, flow aura, rival defeated, milestone celebrations
+- **Streak Bar:** Visual progress toward next streak milestone
+- **Shape Indicator:** Shows current shape (circle/triangle/square)
+- **Audio Settings:** (Planned) Separate sliders for music and SFX volume
 
 ---
 
@@ -348,11 +381,6 @@ npm run cap:sync
 npm run cap:open
 ```
 
-**Config:** `capacitor.config.ts`
-- App ID: `com.savisani.crowdrunner`
-- Web Dir: `dist`
-- Server: `cleartext: true` for local dev
-
 **Gradle:** `android/app/build.gradle` — configure signing, minSdk 24, targetSdk 34
 
 **Output:** `android/app/build/outputs/apk/release/app-release.apk` or `.aab` for Play Store
@@ -387,31 +415,12 @@ git push -u origin main
 - [ ] **Barrier Variety** — Add rotating, scaling, or multi-lane barriers
 - [ ] **Power-ups** — Shield, magnet, score multiplier pickups
 - [ ] **Procedural Difficulty** — Dynamic spawn rate based on crowd size, not just streak
-- [ ] **Audio Polish** — Layered stems, adaptive music intensity
+- [ ] **Audio Polish** — Layered stems, adaptive music intensity (implemented basic intensity via volume)
 - [ ] **Visual Polish** — Shader-based glow, motion blur, better particles
 - [ ] **Leaderboards** — Backend integration for global scores
 - [ ] **Accessibility** — Color-blind mode, reduced motion, haptic feedback
-
----
-
-## Troubleshooting
-
-| Problem | Cause | Fix |
-|---------|-------|-----|
-| `npm install` fails | Node version mismatch | Use Node 18+ (LTS) |
-| Blank screen on dev | Vite base path / import error | Check browser console; verify `main.js` imports |
-| Build fails | TypeScript/ESM issues | `vite.config.js` → `esbuild` target; check imports |
-| Mobile controls unresponsive | Touch event not bound | `Input.js` — verify `canvas` ref passed correctly |
-| Android build fails | Gradle/SDK mismatch | `capacitor doctor`; sync Android Studio SDK |
-| NPC inside barrier | Spawn validation missed case | Check `Spawner._isPositionSafeForNPC` bounds logic |
-| Collision feels wrong | Swept Z margins | Tune `NPC_COLLISION_Z_FRONT/BACK`, `BARRIER_COLLISION_Z_FRONT/BACK` |
-| Crowd jitter | Formation slots / smoothing | Adjust `Crowd.memberSmoothing`, `laneSmoothing` |
-| Stuck on start screen | Audio context not unlocked | Tap screen to unlock `AudioContext` (browser policy) |
-| NPC/obstacle visual merge | Encounter Z-gap too small | Increase `NPC_OBSTACLE_SAME_LANE_GAP` / `NPC_OBSTACLE_VISUAL_GAP` |
-| Near Miss not triggering | Distance threshold | Adjust `NEAR_MISS_DISTANCE` in Config |
-| Perfect Catch not registering | Form change timing | Verify `PERFECT_MATCH_WINDOW` and player.lastFormChangeTime |
-| HUD drifting | Container transform | Ensure `#hud` uses `position: fixed` |
-| Game freezes | Unbounded spawn loop | Check `MAX_SPAWN_ATTEMPTS` in Spawner |
+- [ ] **Virtual Crowd Rendering** — Implement system to render limited visible followers while tracking high logical crowd counts (1000+)
+- [ ] **Branching Tracks** — Add path selection mechanics with risk/reward choices that merge back to main track
 
 ---
 
@@ -450,6 +459,10 @@ git push -u origin main
 - [x] Start / Game Over screens
 - [x] Capacitor Android configuration
 - [x] Production build (Vite)
+- [x] **Dynamic Music** (procedural melodic loop, streak-based intensity)
+- [x] **Fixed Flow Aura Center** (particles spawn in ring to avoid center flame)
+- [ ] Virtual Crowd Rendering
+- [ ] Branching Tracks
 
 ---
 
