@@ -35,6 +35,9 @@ export class Spawner {
     this.spawnSafetyMargin = CONFIG.MIN_SPAWN_GAP * 0.3;
 
     this.encounterZoneDepth = CONFIG.NPC_OBSTACLE_VISUAL_GAP * 2;
+
+    this.MAX_SPAWN_ATTEMPTS = 8;
+    this.spawnDebugCount = 0;
   }
 
   _getNPC() {
@@ -200,8 +203,8 @@ export class Spawner {
   _findSafeLaneForBarrier(excludeLanes = []) {
     const candidates = CONFIG.LANE_POSITIONS.map((_, i) => i).filter(i => !excludeLanes.includes(i));
 
-    for (const lane of candidates) {
-      if (this._isPositionSafeForBarrier(lane, -CONFIG.SPAWN_DISTANCE)) {
+    for (let attempt = 0; attempt < this.MAX_SPAWN_ATTEMPTS; attempt++) {
+      for (const lane of candidates) {
         if (this._checkEncounterZoneClear(lane, -CONFIG.SPAWN_DISTANCE, 'circle', false)) {
           return lane;
         }
@@ -322,6 +325,24 @@ export class Spawner {
     return true;
   }
 
+  _isPositionSafeForNPC(lane, zPos, shape) {
+    return this._checkEncounterZoneClear(lane, zPos, shape, false);
+  }
+
+  _isPositionSafeForBarrier(lane, zPos) {
+    return this._checkEncounterZoneClear(lane, zPos, 'circle', false);
+  }
+
+  _validatePosition(x, y, z) {
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+      if (CONFIG.DEBUG_SPAWN) {
+        console.warn('[Spawner] Invalid position detected:', x, y, z);
+      }
+      return false;
+    }
+    return true;
+  }
+
 _spawnSingleNPC(streak) {
     const npc = this._getNPC();
     const shapeIdx = Math.floor(Math.random() * CONFIG.SHAPES.length);
@@ -333,7 +354,13 @@ _spawnSingleNPC(streak) {
     const targetType = isRisk ? 'risk' : 'safe';
     const crowdReward = isRisk ? CONFIG.RISK_CROWD_REWARD : CONFIG.SAFE_CROWD_REWARD;
 
-    npc.init(this.scene, shape, lane, -CONFIG.SPAWN_DISTANCE, targetType, crowdReward);
+    const spawnZ = -CONFIG.SPAWN_DISTANCE;
+    if (!this._validatePosition(CONFIG.LANE_POSITIONS[lane], CONFIG.PLAYER_Y, spawnZ)) {
+      this._releaseNPC(npc);
+      return;
+    }
+
+    npc.init(this.scene, shape, lane, spawnZ, targetType, crowdReward);
     this.npcActive.push(npc);
     this.lastSpawnLane = lane;
     this.lastSpawnType = 'npc';
@@ -360,7 +387,13 @@ _spawnSingleNPC(streak) {
     const targetType = isRisk ? 'risk' : 'safe';
     const crowdReward = isRisk ? CONFIG.RISK_CROWD_REWARD : CONFIG.SAFE_CROWD_REWARD;
 
-    npc.init(this.scene, shape, lane, -CONFIG.SPAWN_DISTANCE, targetType, crowdReward);
+    const spawnZ = -CONFIG.SPAWN_DISTANCE;
+    if (!this._validatePosition(CONFIG.LANE_POSITIONS[lane], CONFIG.PLAYER_Y, spawnZ)) {
+      this._releaseNPC(npc);
+      return;
+    }
+
+    npc.init(this.scene, shape, lane, spawnZ, targetType, crowdReward);
     this.npcActive.push(npc);
     this.lastSpawnLane = lane;
     this.lastSpawnType = 'npc';
@@ -384,8 +417,14 @@ _spawnSingleNPC(streak) {
     const riskIndex = hasRisk ? Math.floor(Math.random() * targetCount) : -1;
 
     const selectedLanes = [];
+    let attempts = 0;
+    const maxAttempts = availableLanes.length * 2;
+
     for (const lane of shuffled) {
       if (selectedLanes.length >= targetCount) break;
+      if (attempts >= maxAttempts) break;
+      attempts++;
+
       const shape = shapes[selectedLanes.length % shapes.length];
       const validLanes = this._getValidLanesForShape(shape);
       if (!validLanes.includes(lane)) continue;
@@ -402,8 +441,14 @@ _spawnSingleNPC(streak) {
       const crowdReward = isRisk ? CONFIG.RISK_CROWD_REWARD : CONFIG.SAFE_CROWD_REWARD;
 
       const zOffset = i * CONFIG.RISK_SPAWN_DELAY;
+      const spawnZ = -CONFIG.SPAWN_DISTANCE + zOffset;
+      
+      if (!this._validatePosition(CONFIG.LANE_POSITIONS[lane], CONFIG.PLAYER_Y, spawnZ)) {
+        return;
+      }
+
       const npc = this._getNPC();
-      npc.init(this.scene, shape, lane, -CONFIG.SPAWN_DISTANCE + zOffset, targetType, crowdReward);
+      npc.init(this.scene, shape, lane, spawnZ, targetType, crowdReward);
       this.npcActive.push(npc);
     });
 
@@ -431,57 +476,102 @@ _spawnSingleNPC(streak) {
     const excludeLanes = (this.lastSpawnType === 'barrier') ? [this.lastSpawnLane] : [];
     const lane = this._findSafeLaneForBarrier(excludeLanes);
 
-    barrier.init(this.scene, lane, -CONFIG.SPAWN_DISTANCE);
+    const spawnZ = -CONFIG.SPAWN_DISTANCE;
+    if (!this._validatePosition(CONFIG.LANE_POSITIONS[lane], 0, spawnZ)) {
+      this._releaseBarrier(barrier);
+      return;
+    }
+
+    barrier.init(this.scene, lane, spawnZ);
     this.barrierActive.push(barrier);
     this.lastSpawnLane = lane;
     this.lastSpawnType = 'barrier';
   }
 
   update(speed, streak) {
-    this.npcSpawnTimer++;
-    this.barrierSpawnTimer++;
-    this.distanceSinceLastNPC += speed;
-    this.distanceSinceLastBarrier += speed;
+    try {
+      this.npcSpawnTimer++;
+      this.barrierSpawnTimer++;
+      this.distanceSinceLastNPC += speed;
+      this.distanceSinceLastBarrier += speed;
 
-    const adjustedNPCInterval = Math.max(35, CONFIG.NPC_SPAWN_INTERVAL - streak * 0.5);
-    const adjustedBarrierInterval = Math.max(55, CONFIG.BARRIER_SPAWN_INTERVAL - streak * 0.3);
+      const adjustedNPCInterval = Math.max(35, CONFIG.NPC_SPAWN_INTERVAL - streak * 0.5);
+      const adjustedBarrierInterval = Math.max(55, CONFIG.BARRIER_SPAWN_INTERVAL - streak * 0.3);
 
-    if (this.npcSpawnTimer >= adjustedNPCInterval && this.distanceSinceLastNPC >= CONFIG.MIN_SPAWN_GAP) {
-      this._spawnNPC(streak);
-      this.npcSpawnTimer = 0;
-      this.distanceSinceLastNPC = 0;
-    }
+      if (this.npcSpawnTimer >= adjustedNPCInterval && this.distanceSinceLastNPC >= CONFIG.MIN_SPAWN_GAP) {
+        this._spawnNPC(streak);
+        this.npcSpawnTimer = 0;
+        this.distanceSinceLastNPC = 0;
+      }
 
-    if (this.barrierSpawnTimer >= adjustedBarrierInterval && this.distanceSinceLastBarrier >= CONFIG.MIN_SPAWN_GAP) {
-      this._spawnBarrier();
-      this.barrierSpawnTimer = 0;
-      this.distanceSinceLastBarrier = 0;
-    }
+      if (this.barrierSpawnTimer >= adjustedBarrierInterval && this.distanceSinceLastBarrier >= CONFIG.MIN_SPAWN_GAP) {
+        this._spawnBarrier();
+        this.barrierSpawnTimer = 0;
+        this.distanceSinceLastBarrier = 0;
+      }
 
-    for (let i = this.npcActive.length - 1; i >= 0; i--) {
-      const npc = this.npcActive[i];
-      npc.update(speed);
+      for (let i = this.npcActive.length - 1; i >= 0; i--) {
+        const npc = this.npcActive[i];
+        if (!npc || !npc.active) continue;
+        
+        try {
+          npc.update(speed);
+        } catch (e) {
+          if (CONFIG.DEBUG_SPAWN) console.error('[Spawner] NPC update error:', e);
+          npc.deactivate(this.scene);
+          this.npcActive.splice(i, 1);
+          this._releaseNPC(npc);
+          continue;
+        }
 
-      if (npc.isMoving && npc.moveTargetLane !== null) {
-        if (!this._canNPCMoveToLane(npc, npc.moveTargetLane)) {
-          npc.cancelMove();
+        if (npc.isMoving && npc.moveTargetLane !== null) {
+          if (!this._canNPCMoveToLane(npc, npc.moveTargetLane)) {
+            npc.cancelMove();
+          }
+        }
+
+        if (!this._validatePosition(npc.group.position.x, npc.group.position.y, npc.group.position.z)) {
+          if (CONFIG.DEBUG_SPAWN) console.warn('[Spawner] NPC has invalid position, removing');
+          npc.deactivate(this.scene);
+          this.npcActive.splice(i, 1);
+          this._releaseNPC(npc);
+          continue;
+        }
+
+        if (npc.group.position.z > CONFIG.DESPAWN_DISTANCE) {
+          npc.deactivate(this.scene);
+          this.npcActive.splice(i, 1);
+          this._releaseNPC(npc);
         }
       }
 
-      if (npc.group.position.z > CONFIG.DESPAWN_DISTANCE) {
-        npc.deactivate(this.scene);
-        this.npcActive.splice(i, 1);
-        this._releaseNPC(npc);
-      }
-    }
+      for (let i = this.barrierActive.length - 1; i >= 0; i--) {
+        const barrier = this.barrierActive[i];
+        if (!barrier || !barrier.active) continue;
+        
+        try {
+          barrier.update(speed);
+        } catch (e) {
+          if (CONFIG.DEBUG_SPAWN) console.error('[Spawner] Barrier update error:', e);
+          this._releaseBarrier(barrier);
+          this.barrierActive.splice(i, 1);
+          continue;
+        }
 
-    for (let i = this.barrierActive.length - 1; i >= 0; i--) {
-      const barrier = this.barrierActive[i];
-      barrier.update(speed);
-      if (barrier.group.position.z > CONFIG.DESPAWN_DISTANCE) {
-        this._releaseBarrier(barrier);
-        this.barrierActive.splice(i, 1);
+        if (!this._validatePosition(barrier.group.position.x, barrier.group.position.y, barrier.group.position.z)) {
+          if (CONFIG.DEBUG_SPAWN) console.warn('[Spawner] Barrier has invalid position, removing');
+          this._releaseBarrier(barrier);
+          this.barrierActive.splice(i, 1);
+          continue;
+        }
+
+        if (barrier.group.position.z > CONFIG.DESPAWN_DISTANCE) {
+          this._releaseBarrier(barrier);
+          this.barrierActive.splice(i, 1);
+        }
       }
+    } catch (e) {
+      if (CONFIG.DEBUG_SPAWN) console.error('[Spawner] Update error:', e);
     }
   }
 
