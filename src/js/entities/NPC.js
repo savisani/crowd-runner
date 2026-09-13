@@ -26,6 +26,8 @@ export class NPC {
     this.moveTimer = 0;
     this.telegraphTimer = 0;
     this.hasTelegraphed = false;
+    this.isPerfectCatch = false;
+    this.nearMissTriggered = false;
   }
 
   init(scene, shape, lane, zPos, targetType = 'safe', crowdReward = 1) {
@@ -43,6 +45,8 @@ export class NPC {
     this.moveProgress = 0;
     this.telegraphTimer = 0;
     this.hasTelegraphed = false;
+    this.isPerfectCatch = false;
+    this.nearMissTriggered = false;
 
     if (this.mesh) {
       this.group.remove(this.mesh);
@@ -246,6 +250,8 @@ export class NPC {
     this.prevZ = 0;
     this.targetType = 'safe';
     this.crowdReward = 1;
+    this.isPerfectCatch = false;
+    this.nearMissTriggered = false;
     this.bobPhase = Math.random() * Math.PI * 2;
     if (this.mesh) {
       this.mesh.position.y = 0;

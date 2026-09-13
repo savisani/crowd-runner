@@ -78,7 +78,7 @@ export const CONFIG = {
     square: 'green'
   },
 
-  // Perfect Match
+  // Perfect Match / Perfect Catch
   PERFECT_MATCH_WINDOW: 0.35,
 
   // Multi-target & Risk/Safe
@@ -104,11 +104,21 @@ export const CONFIG = {
   MOVING_NPC_MOVE_START_DISTANCE: 25,
   MOVING_NPC_MOVE_DURATION: 25,
 
+  // NPC-Obstacle Visual Separation
+  NPC_OBSTACLE_VISUAL_GAP: 18,
+  NPC_OBSTACLE_SAME_LANE_GAP: 24,
+  NPC_OBSTACLE_MULTI_TARGET_GAP: 16,
+
+  // Near Miss
+  NEAR_MISS_DISTANCE: 3.5,
+  NEAR_MISS_COOLDOWN_FRAMES: 45,
+
   // Effects
   MAX_PARTICLES: 80,
   PARTICLE_LIFETIME: 600,
   TRAIL_LENGTH: 8,
 
   // Debug
-  DEBUG_COLLISION: false
+  DEBUG_COLLISION: false,
+  DEBUG_SPAWN: false
 };

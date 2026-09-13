@@ -216,13 +216,23 @@ export class UI {
   _showStreakIncrementText(streak, isPerfectMatch = false) {
     const popup = document.createElement('div');
     popup.className = 'streak-increment';
-    popup.textContent = isPerfectMatch ? 'PERFECT!' : '+1 STREAK';
     if (isPerfectMatch) {
-      popup.classList.add('perfect-increment');
+      popup.textContent = 'PERFECT CATCH!';
+      popup.classList.add('perfect-catch');
+    } else {
+      popup.textContent = '+1 STREAK';
     }
     const streakDisplay = document.getElementById('streak-display');
     streakDisplay.appendChild(popup);
-    setTimeout(() => popup.remove(), 800);
+    setTimeout(() => popup.remove(), 1000);
+  }
+
+  showNearMiss(text, isMiss = false) {
+    const popup = document.createElement('div');
+    popup.className = 'near-miss-popup';
+    popup.textContent = text;
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 1000);
   }
 
   _checkMilestones(streak) {

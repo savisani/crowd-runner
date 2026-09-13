@@ -33,6 +33,8 @@ export class Spawner {
     this.barrierHalfDepth = 0.6 * 0.5;
     this.barrierHeight = CONFIG.BARRIER_COLLISION_HEIGHT;
     this.spawnSafetyMargin = CONFIG.MIN_SPAWN_GAP * 0.3;
+
+    this.encounterZoneDepth = CONFIG.NPC_OBSTACLE_VISUAL_GAP * 2;
   }
 
   _getNPC() {
@@ -106,62 +108,92 @@ export class Spawner {
     );
   }
 
-  _isPositionSafeForNPC(lane, zPos, shape) {
+  _getRequiredZGap(lane, isSameLane) {
+    if (isSameLane) {
+      return CONFIG.NPC_OBSTACLE_SAME_LANE_GAP;
+    }
+    return CONFIG.NPC_OBSTACLE_VISUAL_GAP;
+  }
+
+  _checkEncounterZoneClear(lane, zPos, shape, isMultiTarget = false, zOffset = 0) {
+    const requiredGap = isMultiTarget 
+      ? CONFIG.NPC_OBSTACLE_MULTI_TARGET_GAP 
+      : this._getRequiredZGap(lane, true);
+    
+    for (const barrier of this.barrierActive) {
+      if (barrier.lane !== lane) continue;
+      
+      const dz = Math.abs(barrier.group.position.z - zPos);
+      if (dz < requiredGap) {
+        return false;
+      }
+    }
+    
+    for (const npc of this.npcActive) {
+      if (npc.lane !== lane) continue;
+      
+      const dz = Math.abs(npc.group.position.z - zPos);
+      if (dz < requiredGap * 0.5) {
+        return false;
+      }
+    }
+    
+    return true;
+  }
+
+  _getEncounterZoneBounds(lane, zPos, shape) {
     const npcBounds = this._getNPCBounds(lane, zPos, shape);
+    const halfDepth = Math.max(npcBounds.maxZ - npcBounds.minZ, CONFIG.NPC_OBSTACLE_VISUAL_GAP);
+    return {
+      minZ: zPos - halfDepth,
+      maxZ: zPos + halfDepth,
+      lane: lane
+    };
+  }
 
+  _isEncounterZoneClear(zoneBounds, excludeNpc = null) {
     for (const barrier of this.barrierActive) {
-      const barrierBounds = this._getBarrierBounds(barrier.lane, barrier.group.position.z);
-      if (this._boundsOverlap(npcBounds, barrierBounds, this.spawnSafetyMargin)) {
+      if (barrier.lane !== zoneBounds.lane) continue;
+      const bZ = barrier.group.position.z;
+      if (bZ > zoneBounds.minZ && bZ < zoneBounds.maxZ) {
         return false;
       }
     }
-
+    
     for (const npc of this.npcActive) {
-      const otherBounds = this._getNPCBounds(npc.lane, npc.group.position.z, npc.shape);
-      if (this._boundsOverlap(npcBounds, otherBounds, this.spawnSafetyMargin)) {
+      if (npc === excludeNpc) continue;
+      if (npc.lane !== zoneBounds.lane) continue;
+      const nZ = npc.group.position.z;
+      if (nZ > zoneBounds.minZ && nZ < zoneBounds.maxZ) {
         return false;
       }
     }
-
+    
     return true;
   }
 
-  _isPositionSafeForBarrier(lane, zPos) {
-    const barrierBounds = this._getBarrierBounds(lane, zPos);
-
-    for (const npc of this.npcActive) {
-      const npcBounds = this._getNPCBounds(npc.lane, npc.group.position.z, npc.shape);
-      if (this._boundsOverlap(barrierBounds, npcBounds, this.spawnSafetyMargin)) {
-        return false;
-      }
-    }
-
-    for (const barrier of this.barrierActive) {
-      const otherBounds = this._getBarrierBounds(barrier.lane, barrier.group.position.z);
-      if (this._boundsOverlap(barrierBounds, otherBounds, this.spawnSafetyMargin)) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
-  _findSafeLaneForNPC(shape, excludeLanes = []) {
-    const validLanes = this._getValidLanesForShape(shape);
+  _findValidEncounterPosition(shape, excludeLanes = [], isMoving = false, isMultiTarget = false) {
+    const validLanes = isMoving 
+      ? this._getValidLanesForShape(shape).filter(l => {
+          const targets = this._getValidMoveTargets(l);
+          return targets.some(t => this._getValidLanesForShape(shape).includes(t));
+        })
+      : this._getValidLanesForShape(shape);
+    
     const candidates = validLanes.filter(l => !excludeLanes.includes(l));
-
+    
     for (const lane of candidates) {
-      if (this._isPositionSafeForNPC(lane, -CONFIG.SPAWN_DISTANCE, shape)) {
+      if (this._checkEncounterZoneClear(lane, -CONFIG.SPAWN_DISTANCE, shape, isMultiTarget)) {
         return lane;
       }
     }
-
+    
     for (const lane of candidates) {
       if (this._canSafelySpawnInLane(lane)) {
         return lane;
       }
     }
-
+    
     return candidates.length > 0 ? candidates[0] : validLanes[0];
   }
 
@@ -170,6 +202,14 @@ export class Spawner {
 
     for (const lane of candidates) {
       if (this._isPositionSafeForBarrier(lane, -CONFIG.SPAWN_DISTANCE)) {
+        if (this._checkEncounterZoneClear(lane, -CONFIG.SPAWN_DISTANCE, 'circle', false)) {
+          return lane;
+        }
+      }
+    }
+
+    for (const lane of candidates) {
+      if (this._canSafelySpawnInLane(lane)) {
         return lane;
       }
     }
@@ -191,7 +231,7 @@ export class Spawner {
     const targetX = CONFIG.LANE_POSITIONS[targetLane];
     const clampedTargetX = Math.max(-maxCenterX, Math.min(maxCenterX, targetX));
 
-    const steps = 5;
+    const steps = 10;
     for (let i = 0; i <= steps; i++) {
       const t = i / steps;
       const interpX = clampedStartX + (clampedTargetX - clampedStartX) * t;
@@ -205,8 +245,17 @@ export class Spawner {
       };
 
       for (const barrier of this.barrierActive) {
+        if (barrier.lane !== targetLane && barrier.lane !== currentLane) continue;
         const barrierBounds = this._getBarrierBounds(barrier.lane, barrier.group.position.z);
         if (this._boundsOverlap(testBounds, barrierBounds, this.spawnSafetyMargin)) {
+          return false;
+        }
+        
+        const dz = Math.abs(barrier.group.position.z - npcZ);
+        const requiredGap = barrier.lane === targetLane 
+          ? CONFIG.NPC_OBSTACLE_SAME_LANE_GAP 
+          : CONFIG.NPC_OBSTACLE_VISUAL_GAP;
+        if (dz < requiredGap) {
           return false;
         }
       }
@@ -278,11 +327,7 @@ _spawnSingleNPC(streak) {
     const shapeIdx = Math.floor(Math.random() * CONFIG.SHAPES.length);
     const shape = CONFIG.SHAPES[shapeIdx];
 
-    const validLanes = this._getValidLanesForShape(shape);
-    const safeLanes = validLanes.filter(l => this._isPositionSafeForNPC(l, -CONFIG.SPAWN_DISTANCE, shape));
-    const lane = safeLanes.length > 0
-      ? safeLanes[Math.floor(Math.random() * safeLanes.length)]
-      : validLanes[Math.floor(Math.random() * validLanes.length)];
+    const lane = this._findValidEncounterPosition(shape, [], false, false);
 
     const isRisk = Math.random() < this._getRiskProbability(streak);
     const targetType = isRisk ? 'risk' : 'safe';
@@ -299,22 +344,16 @@ _spawnSingleNPC(streak) {
     const shapeIdx = Math.floor(Math.random() * CONFIG.SHAPES.length);
     const shape = CONFIG.SHAPES[shapeIdx];
 
+    const lane = this._findValidEncounterPosition(shape, [], true, false);
     const validLanes = this._getValidLanesForShape(shape);
-    const safeLanes = validLanes.filter(l => this._isPositionSafeForNPC(l, -CONFIG.SPAWN_DISTANCE, shape));
+    const targets = this._getValidMoveTargets(lane);
+    const validTargets = targets.filter(t => validLanes.includes(t) && this._checkEncounterZoneClear(t, -CONFIG.SPAWN_DISTANCE, shape));
 
-    const movableLanes = safeLanes.filter(lane => {
-      const targets = this._getValidMoveTargets(lane);
-      return targets.some(t => this._isPositionSafeForNPC(t, -CONFIG.SPAWN_DISTANCE, shape));
-    });
-
-    if (movableLanes.length === 0) {
+    if (validTargets.length === 0) {
       this._releaseNPC(npc);
       return;
     }
 
-    const lane = movableLanes[Math.floor(Math.random() * movableLanes.length)];
-    const targets = this._getValidMoveTargets(lane);
-    const validTargets = targets.filter(t => this._isPositionSafeForNPC(t, -CONFIG.SPAWN_DISTANCE, shape));
     const targetLane = validTargets[Math.floor(Math.random() * validTargets.length)];
 
     const isRisk = Math.random() < this._getRiskProbability(streak);
@@ -339,24 +378,31 @@ _spawnSingleNPC(streak) {
 
     const availableLanes = this._getAvailableLanes();
     const shuffled = [...availableLanes].sort(() => Math.random() - 0.5);
-    const selectedLanes = shuffled.slice(0, targetCount);
 
     const shapes = [...CONFIG.SHAPES].sort(() => Math.random() - 0.5);
     const hasRisk = targetCount >= 2 && Math.random() < this._getRiskProbability(streak);
     const riskIndex = hasRisk ? Math.floor(Math.random() * targetCount) : -1;
 
+    const selectedLanes = [];
+    for (const lane of shuffled) {
+      if (selectedLanes.length >= targetCount) break;
+      const shape = shapes[selectedLanes.length % shapes.length];
+      const validLanes = this._getValidLanesForShape(shape);
+      if (!validLanes.includes(lane)) continue;
+      if (!this._checkEncounterZoneClear(lane, -CONFIG.SPAWN_DISTANCE + selectedLanes.length * CONFIG.RISK_SPAWN_DELAY, shape, true)) continue;
+      selectedLanes.push(lane);
+    }
+
+    if (selectedLanes.length === 0) return;
+
     selectedLanes.forEach((lane, i) => {
       const shape = shapes[i % shapes.length];
-      const validLanes = this._getValidLanesForShape(shape);
-      if (!validLanes.includes(lane)) return;
-      if (!this._isPositionSafeForNPC(lane, -CONFIG.SPAWN_DISTANCE + i * CONFIG.RISK_SPAWN_DELAY, shape)) return;
-
-      const npc = this._getNPC();
       const isRisk = i === riskIndex;
       const targetType = isRisk ? 'risk' : 'safe';
       const crowdReward = isRisk ? CONFIG.RISK_CROWD_REWARD : CONFIG.SAFE_CROWD_REWARD;
 
       const zOffset = i * CONFIG.RISK_SPAWN_DELAY;
+      const npc = this._getNPC();
       npc.init(this.scene, shape, lane, -CONFIG.SPAWN_DISTANCE + zOffset, targetType, crowdReward);
       this.npcActive.push(npc);
     });

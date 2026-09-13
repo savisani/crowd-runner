@@ -29,10 +29,11 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 | **Crowd Growth** | Recruited NPCs follow behind in formation |
 | **Obstacles** | Barriers block lanes; must jump or switch lanes |
 | **Streak** | Consecutive matches increase streak, speed, and score |
-| **Perfect Match** | Match within 0.35s of shape change for bonus effects |
+| **Perfect Catch** | Match within 0.35s of shape change for bonus effects |
 | **Multi-target** | 2-3 NPCs spawn simultaneously in different lanes |
 | **Risk/Safe** | Risk targets give +3 crowd but are visually distinct; Safe give +1 |
 | **Moving NPCs** | Some NPCs telegraph and change lanes mid-approach |
+| **Near Miss** | Narrowly avoid obstacles or mismatched NPCs for feedback |
 
 ---
 
@@ -46,7 +47,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 
 ### NPC
 - **Entity:** `src/js/entities/NPC.js`
-- **Properties:** Shape, Color, Lane, Target Type (safe/risk), Crowd Reward, Moving State
+- **Properties:** Shape, Color, Lane, Target Type (safe/risk), Crowd Reward, Moving State, Perfect Catch Flag, Near Miss Flag
 - **Visuals:** Scaled shape mesh (0.85x), animated face (angry/happy), floating label (+1/+3)
 - **Behavior:** Bobbing animation, constant rotation, telegraph before lane change, smooth lateral movement with easing
 - **Collision:** Swept Z-overlap with vertical tolerance
@@ -61,6 +62,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **File:** `src/js/systems/Collision.js`
 - **Player ↔ NPC:** Lane match + swept Z overlap + vertical tolerance → match/mismatch
 - **Player ↔ Barrier:** Lane match + swept Z overlap + jump height check → crash
+- **Near Miss Detection:** Proximity check within `NEAR_MISS_DISTANCE` (3.5 units) without collision
 - **No NPC ↔ Barrier** gameplay collision (spatial overlap prevented at spawn/movement instead)
 
 ### Spawning System
@@ -68,13 +70,14 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Pools:** 20 NPCs, 8 Barriers (object pooling)
 - **Intervals:** NPC every ~70 frames, Barrier every ~110 frames (decreases with streak)
 - **Minimum Gap:** 30 units between spawns of same type
-- **Validation:** All spawns use 3D bounds checking with safety margin
+- **Validation:** All spawns use 3D bounds checking with safety margin + encounter-level Z separation
 
 ### Moving NPC System
 - **Probability:** 7.5% base, increases with streak (max 15%)
 - **Telegraph:** 30-unit timer with visual wobble before move
 - **Movement:** Starts at 25 units from player, lasts 25 frames, cubic easing
-- **Validation:** Pre-spawn target lane check + runtime path validation against barriers
+- **Validation:** Pre-spawn target lane check + runtime swept-path validation against barriers (10 samples)
+- **Visual Separation:** Checks Z-distance to barriers in both start and target lanes during transition
 
 ### Crowd System
 - **File:** `src/js/entities/Crowd.js`
@@ -88,9 +91,32 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Speed Formula:** `BASE_SPEED + floor(streak / 10) * 0.01` (capped at 0.85)
 - **UI:** Progress bar, milestone popups, camera punch, lighting pulse
 
-### Perfect Match
-- **Window:** 0.35 seconds after shape change
-- **Rewards:** Audio cue, particle burst, camera punch, lighting flash
+### Perfect Catch
+- **Window:** 0.35 seconds after shape change (configurable: `PERFECT_MATCH_WINDOW`)
+- **Requirements:** 
+  1. Player shape exactly matches NPC shape
+  2. Player changed into that form recently (within window)
+  3. Collision/match occurs successfully
+  4. NPC is successfully recruited
+- **Rewards:** 
+  - "PERFECT CATCH!" UI text (distinct from normal streak)
+  - Enhanced particle burst (30 particles, radial spread)
+  - Distinct audio chord (880→1047→1319→1568 Hz)
+  - Stronger camera punch (0.04 intensity, 8 frames)
+  - Lighting pulse
+- **No gameplay advantage** beyond feedback — streak and crowd rewards unchanged
+
+### Near Miss
+- **Trigger:** Player passes within `NEAR_MISS_DISTANCE` (3.5 units) of:
+  - Barrier in same lane (while not jumping)
+  - Mismatched NPC in same lane
+- **Cooldown:** `NEAR_MISS_COOLDOWN_FRAMES` (45 frames) per entity — each object triggers once
+- **Priority:** Collision takes precedence — Near Miss never fires after hit
+- **Feedback:**
+  - "NEAR MISS!" UI text
+  - Subtle particle effect (15 particles, amber/orange)
+  - Distinct audio cue (660→580 Hz descending)
+- **No reward** — purely feedback for mastery recognition
 
 ### Multi-target Encounters
 - **Probability:** 30% base, +1% per streak (max 50%)
@@ -98,6 +124,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Shapes:** Randomized, distinct per target
 - **Risk Injection:** 40% chance one target is risk (+3 reward)
 - **Stagger:** 8-unit Z offset between targets
+- **Encounter Validation:** Entire group validated against obstacles with `NPC_OBSTACLE_MULTI_TARGET_GAP` (16 units)
 
 ### Risk/Safe Encounters
 - **Risk Probability:** 40% (after early game)
@@ -109,7 +136,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 
 ## Spawn Safety (Critical)
 
-**Rule:** NPCs and Barriers must NEVER occupy overlapping physical gameplay space.
+**Rule:** NPCs and Barriers must NEVER occupy overlapping physical gameplay space OR create visually ambiguous encounters.
 
 **Validation Pipeline:**
 
@@ -121,15 +148,21 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
    - AABB intersection with configurable safety margin (`MIN_SPAWN_GAP × 0.3 = 9 units`)
    - Checks all 3 axes (X, Y, Z)
 
-3. **Spawn Gates**
-   - **Single NPC:** `_isPositionSafeForNPC(lane, z, shape)` vs all active barriers + NPCs
-   - **Multi-target:** Same check per target with Z stagger
-   - **Moving NPC:** Spawn lane + target lane both validated at spawn Z; runtime path validation during movement
-   - **Barrier:** `_isPositionSafeForBarrier(lane, z)` vs all active NPCs + barriers
+3. **Encounter-Level Z Separation** (NEW)
+   - **Same Lane:** `NPC_OBSTACLE_SAME_LANE_GAP` = 24 units minimum Z separation
+   - **Different Lane:** `NPC_OBSTACLE_VISUAL_GAP` = 18 units minimum Z separation  
+   - **Multi-target:** `NPC_OBSTACLE_MULTI_TARGET_GAP` = 16 units per target
+   - Based on camera perspective (camera at Z=8, FOV 65°): these distances ensure clear visual separation at spawn distance (Z=-55)
 
-4. **Fallback:** If no safe lane found, falls back to lane-only Z-gap check (`_canSafelySpawnInLane`), then first valid lane
+4. **Spawn Gates**
+   - **Single NPC:** `_findValidEncounterPosition()` — checks encounter zone clearance + bounds
+   - **Multi-target:** Validates each target + entire encounter zone against obstacles
+   - **Moving NPC:** Spawn lane + target lane both validated; runtime swept-path check (10 samples)
+   - **Barrier:** `_findSafeLaneForBarrier()` — checks encounter zone + bounds
 
-5. **Moving NPC Runtime:** `_canNPCMoveToLane(npc, targetLane)` samples 5 points along lateral path at NPC's current Z; cancels move if barrier detected
+5. **Fallback:** If no safe lane found, falls back to lane-only Z-gap check (`_canSafelySpawnInLane`), then first valid lane
+
+6. **Moving NPC Runtime:** `_canNPCMoveToLane(npc, targetLane)` samples 10 points along lateral path; checks both AABB overlap AND Z-distance to barriers in start/target lanes
 
 **Lane ≠ Safety:** Same lane is allowed if Z separation + margins clear both objects' bounds. System evaluates X AND Z simultaneously.
 
@@ -162,7 +195,7 @@ crowd-runner/
 │       │   └── Track.js       # Infinite scrolling track segments
 │       ├── systems/
 │       │   ├── Spawner.js     # NPC/barrier spawning, pools, SPAWN SAFETY
-│       │   ├── Collision.js   # Player-NPC, Player-Barrier collision
+│       │   ├── Collision.js   # Player-NPC, Player-Barrier collision + Near Miss
 │       │   ├── Effects.js     # Particles, trails, screen shake, lighting
 │       │   └── Audio.js       # Web Audio API synthesis (no assets)
 │       └── ui/
@@ -290,6 +323,9 @@ git push -u origin main
 | Collision feels wrong | Swept Z margins | Tune `NPC_COLLISION_Z_FRONT/BACK`, `BARRIER_COLLISION_Z_FRONT/BACK` |
 | Crowd jitter | Formation slots / smoothing | Adjust `Crowd.memberSmoothing`, `laneSmoothing` |
 | Stuck on start screen | Audio context not unlocked | Tap screen to unlock `AudioContext` (browser policy) |
+| NPC/obstacle visual merge | Encounter Z-gap too small | Increase `NPC_OBSTACLE_SAME_LANE_GAP` / `NPC_OBSTACLE_VISUAL_GAP` |
+| Near Miss not triggering | Distance threshold | Adjust `NEAR_MISS_DISTANCE` in Config |
+| Perfect Catch not registering | Form change timing | Verify `PERFECT_MATCH_WINDOW` and player.lastFormChangeTime |
 
 ---
 
@@ -305,15 +341,17 @@ git push -u origin main
 - [x] Crowd recruitment & formation following
 - [x] Streak counter + speed bonus
 - [x] Streak progress bar (UI)
-- [x] Perfect Match (0.35s window)
+- [x] Perfect Catch (0.35s window, distinct feedback)
 - [x] Multi-target encounters (2-3 NPCs)
 - [x] Risk/Safe targets (+3/+1 crowd, visual distinction)
 - [x] Moving NPCs (telegraph + lateral move)
 - [x] Obstacle/Barrier system (jump or dodge)
 - [x] Crowd bounce on milestones
 - [x] NPC/Barrier spawn separation (3D bounds + safety margin)
-- [x] Moving NPC barrier avoidance (runtime path validation)
-- [x] Particle effects (match, mismatch, crash, perfect, streak)
+- [x] Moving NPC barrier avoidance (runtime swept-path validation)
+- [x] Encounter-level visual Z separation (camera-aware)
+- [x] Near Miss detection (barrier + mismatched NPC)
+- [x] Particle effects (match, mismatch, crash, perfect, streak, perfect catch, near miss)
 - [x] Camera punch / lighting pulse / screen shake
 - [x] Procedural audio (Web Audio API, zero assets)
 - [x] HUD (score, streak, crowd, shape indicator)

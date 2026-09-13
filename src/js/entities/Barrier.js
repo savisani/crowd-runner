@@ -8,6 +8,7 @@ export class Barrier {
     this.lane = 0;
     this.processedThisFrame = false;
     this.prevZ = 0;
+    this.nearMissTriggered = false;
   }
 
   init(scene, lane, zPos) {
@@ -15,6 +16,7 @@ export class Barrier {
     this.active = true;
     this.processedThisFrame = false;
     this.prevZ = zPos;
+    this.nearMissTriggered = false;
 
     if (this.group) {
       if (this.group.parent) {

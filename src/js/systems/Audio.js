@@ -88,4 +88,9 @@ export class Audio {
     setTimeout(() => this._playTone(1319, 0.15, 'sine', 0.25), 160);
     setTimeout(() => this._playTone(1568, 0.2, 'sine', 0.2), 240);
   }
+
+  playNearMiss() {
+    this._playTone(660, 0.06, 'sine', 0.15);
+    setTimeout(() => this._playTone(580, 0.08, 'sine', 0.12), 50);
+  }
 }

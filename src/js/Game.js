@@ -189,6 +189,9 @@ export class Game {
     }
 
     for (const npc of results.npcMatch) {
+      const isPerfect = this._checkPerfectMatch();
+      npc.isPerfectCatch = isPerfect;
+
       npc.makeHappy();
       const reward = npc.crowdReward || 1;
       for (let i = 0; i < reward; i++) {
@@ -203,7 +206,7 @@ export class Game {
       this.speed = CONFIG.BASE_SPEED + Math.floor(this.streak / CONFIG.STREAK_SPEED_BONUS) * CONFIG.SPEED_INCREMENT;
       this.speed = Math.min(this.speed, CONFIG.MAX_SPEED);
 
-      this._onSuccessfulMatch(npc);
+      this._onSuccessfulMatch(npc, isPerfect);
     }
 
     for (const npc of results.npcMismatch) {
@@ -228,6 +231,10 @@ export class Game {
       this.ui.showStreakPopup('WRONG! -' + lostCrowd, true);
     }
 
+    for (const nearMiss of results.nearMiss) {
+      this._onNearMiss(nearMiss);
+    }
+
     if (this.crowd.getCount() === 0 && this.score > 0) {
       this._gameOver();
     }
@@ -247,9 +254,7 @@ export class Game {
     }
   }
 
-  _onSuccessfulMatch(npc) {
-    const isPerfectMatch = this._checkPerfectMatch();
-
+  _onSuccessfulMatch(npc, isPerfectMatch = false) {
     this.audio.playMatch(this.streak);
     this.audio.playPop();
 
@@ -275,6 +280,12 @@ export class Game {
         npc.group.position.z,
         npc.shape
       );
+      this.effects.spawnPerfectCatchParticles(
+        npc.group.position.x,
+        npc.group.position.y,
+        npc.group.position.z,
+        npc.shape
+      );
     }
 
     this.ui.updateStreak(this.streak);
@@ -295,6 +306,23 @@ export class Game {
 
     if (isPerfectMatch) {
       this.effects.triggerPerfectCameraPunch();
+    }
+  }
+
+  _onNearMiss(nearMiss) {
+    const { type, entity } = nearMiss;
+    const x = entity.group.position.x;
+    const y = entity.group.position.y;
+    const z = entity.group.position.z;
+
+    if (type === 'barrier') {
+      this.audio.playNearMiss();
+      this.effects.spawnNearMissParticles(x, y, z, 'barrier');
+      this.ui.showNearMiss('NEAR MISS!', false);
+    } else if (type === 'mismatch') {
+      this.audio.playNearMiss();
+      this.effects.spawnNearMissParticles(x, y, z, 'npc');
+      this.ui.showNearMiss('NEAR MISS!', false);
     }
   }
 

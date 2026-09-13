@@ -233,6 +233,58 @@ export class Effects {
     }
   }
 
+  spawnPerfectCatchParticles(x, y, z, shape) {
+    const color = CONFIG.COLORS[shape];
+    const r = ((color >> 16) & 255) / 255;
+    const g = ((color >> 8) & 255) / 255;
+    const b = (color & 255) / 255;
+
+    const count = 30;
+
+    for (let i = 0; i < count; i++) {
+      const p = this._acquireParticle();
+      if (!p) break;
+      p.active = true;
+      p.life = 0;
+      p.maxLife = CONFIG.PARTICLE_LIFETIME * 1.5;
+      p.x = x + (Math.random() - 0.5) * 1.0;
+      p.y = y + Math.random() * 1.2;
+      p.z = z + (Math.random() - 0.5) * 1.0;
+      const angle = (i / count) * Math.PI * 2;
+      const speed = 0.12 + Math.random() * 0.08;
+      p.vx = Math.cos(angle) * speed;
+      p.vy = 0.1 + Math.random() * 0.15;
+      p.vz = Math.sin(angle) * speed;
+      p.r = r; p.g = g; p.b = b;
+    }
+  }
+
+  spawnNearMissParticles(x, y, z, type) {
+    const isBarrier = type === 'barrier';
+    const r = isBarrier ? 1.0 : 1.0;
+    const g = isBarrier ? 0.8 : 0.6;
+    const b = isBarrier ? 0.2 : 0.2;
+
+    const count = 15;
+
+    for (let i = 0; i < count; i++) {
+      const p = this._acquireParticle();
+      if (!p) break;
+      p.active = true;
+      p.life = 0;
+      p.maxLife = CONFIG.PARTICLE_LIFETIME * 0.8;
+      p.x = x + (Math.random() - 0.5) * 0.6;
+      p.y = y + Math.random() * 0.6;
+      p.z = z + (Math.random() - 0.5) * 0.6;
+      const angle = (i / count) * Math.PI * 2;
+      const speed = 0.08 + Math.random() * 0.06;
+      p.vx = Math.cos(angle) * speed;
+      p.vy = 0.04 + Math.random() * 0.06;
+      p.vz = Math.sin(angle) * speed;
+      p.r = r; p.g = g; p.b = b;
+    }
+  }
+
   updateParticles() {
     if (this.cameraShakeDuration > 0) {
       this.cameraShakeDuration--;
