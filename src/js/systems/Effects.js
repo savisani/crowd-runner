@@ -11,10 +11,183 @@ export class Effects {
     this.lightPulseIntensity = 0;
     this.lightPulseDuration = 0;
 
+    // Flow Aura
+    this.flowActive = false;
+    this.flowTimer = 0;
+    this.flowDuration = CONFIG.FLOW_DURATION * 60; // frames at 60fps
+    this.flowAuraMeshes = [];
+    this.flowParticles = [];
+
     this._initParticles();
     this._initTrails();
     this._initLights();
     this._initBackground();
+    this._initFlowAura();
+  }
+
+  _initFlowAura() {
+    // Create aura ring meshes
+    for (let i = 0; i < CONFIG.FLOW_RING_COUNT; i++) {
+      const geo = new THREE.RingGeometry(0.8 + i * 0.3, 1.0 + i * 0.3, 32);
+      const mat = new THREE.MeshBasicMaterial({
+        color: CONFIG.FLOW_AURA_COLOR,
+        transparent: true,
+        opacity: 0,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.flowAuraMeshes.push({ mesh, baseRadius: 0.8 + i * 0.3, phase: i * 0.5 });
+    }
+
+    // Create flow particles pool
+    for (let i = 0; i < CONFIG.FLOW_PARTICLE_COUNT; i++) {
+      const geo = new THREE.SphereGeometry(0.06, 4, 4);
+      const mat = new THREE.MeshBasicMaterial({
+        color: CONFIG.FLOW_AURA_COLOR,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.flowParticles.push({
+        mesh,
+        active: false,
+        life: 0,
+        maxLife: 0,
+        x: 0, y: 0, z: 0,
+        vx: 0, vy: 0, vz: 0,
+        baseSize: 0.06
+      });
+    }
+  }
+
+  triggerFlowAura(playerMesh, playerShape) {
+    this.flowActive = true;
+    this.flowTimer = this.flowDuration;
+
+    // Show aura rings
+    this.flowAuraMeshes.forEach(({ mesh }) => {
+      mesh.visible = true;
+      mesh.material.opacity = 0.4;
+      mesh.position.copy(playerMesh.position);
+      mesh.position.y = playerMesh.position.y;
+    });
+
+    // Spawn initial flow particles
+    this._spawnFlowParticles(playerMesh.position.x, playerMesh.position.y, playerMesh.position.z, playerShape);
+  }
+
+  _spawnFlowParticles(x, y, z, shape) {
+    const color = CONFIG.FLOW_AURA_COLOR;
+    const r = ((color >> 16) & 255) / 255;
+    const g = ((color >> 8) & 255) / 255;
+    const b = (color & 255) / 255;
+
+    for (let i = 0; i < this.flowParticles.length; i++) {
+      const p = this.flowParticles[i];
+      if (!p.active) {
+        p.active = true;
+        p.life = 0;
+        p.maxLife = 60 + Math.random() * 60; // 1-2 seconds
+        p.x = x + (Math.random() - 0.5) * 0.8;
+        p.y = y + Math.random() * 1.0;
+        p.z = z + (Math.random() - 0.5) * 0.8;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 0.03 + Math.random() * 0.05;
+        p.vx = Math.cos(angle) * speed;
+        p.vy = 0.02 + Math.random() * 0.04;
+        p.vz = Math.sin(angle) * speed;
+        p.mesh.material.color.setRGB(r, g, b);
+        p.mesh.material.opacity = 0.8;
+        p.mesh.scale.setScalar(0.5 + Math.random() * 0.5);
+        p.mesh.visible = true;
+        p.mesh.position.set(p.x, p.y, p.z);
+      }
+    }
+  }
+
+  updateFlowAura(playerMesh, dt) {
+    if (!this.flowActive) return;
+
+    this.flowTimer--;
+    if (this.flowTimer <= 0) {
+      this._deactivateFlowAura();
+      return;
+    }
+
+    const progress = 1 - this.flowTimer / this.flowDuration;
+    const pulsePhase = performance.now() * 0.003;
+
+    // Update aura rings
+    this.flowAuraMeshes.forEach(({ mesh, baseRadius, phase }) => {
+      if (mesh.visible) {
+        mesh.position.copy(playerMesh.position);
+        mesh.position.y = playerMesh.position.y;
+
+        const ringPhase = pulsePhase + phase;
+        const scale = 1 + Math.sin(ringPhase) * 0.15;
+        const radius = baseRadius * scale;
+        mesh.geometry.dispose();
+        mesh.geometry = new THREE.RingGeometry(radius * 0.8, radius, 32);
+
+        // Fade out near end
+        if (this.flowTimer < 60) {
+          mesh.material.opacity = 0.4 * (this.flowTimer / 60);
+        }
+      }
+    });
+
+    // Update flow particles
+    this.flowParticles.forEach(p => {
+      if (p.active) {
+        p.life++;
+        if (p.life >= p.maxLife) {
+          p.active = false;
+          p.mesh.visible = false;
+          return;
+        }
+
+        p.x += p.vx;
+        p.y += p.vy;
+        p.z += p.vz;
+        p.vy -= 0.0005;
+
+        const lifeRatio = 1 - p.life / p.maxLife;
+        p.mesh.material.opacity = 0.8 * lifeRatio;
+        p.mesh.scale.setScalar(p.baseSize * lifeRatio);
+        p.mesh.position.set(p.x, p.y, p.z);
+      }
+    });
+
+    // Periodically spawn new particles
+    if (this.flowTimer % 15 === 0) {
+      this._spawnFlowParticles(playerMesh.position.x, playerMesh.position.y, playerMesh.position.z, 'circle');
+    }
+  }
+
+  _deactivateFlowAura() {
+    this.flowActive = false;
+    this.flowTimer = 0;
+    this.flowAuraMeshes.forEach(({ mesh }) => {
+      mesh.visible = false;
+      mesh.material.opacity = 0;
+    });
+    this.flowParticles.forEach(p => {
+      p.active = false;
+      p.mesh.visible = false;
+    });
+  }
+
+  isFlowActive() {
+    return this.flowActive;
   }
 
   _initParticles() {
@@ -401,6 +574,31 @@ export class Effects {
     }
   }
 
+  spawnRivalDefeatedParticles(x, y, z) {
+    // Green/gold celebration particles
+    for (let i = 0; i < 25; i++) {
+      const p = this._acquireParticle();
+      if (!p) break;
+      p.active = true;
+      p.life = 0;
+      p.maxLife = CONFIG.PARTICLE_LIFETIME * 1.2;
+      p.x = x + (Math.random() - 0.5) * 1.0;
+      p.y = y + Math.random() * 1.5;
+      p.z = z + (Math.random() - 0.5) * 1.0;
+      const angle = (i / 25) * Math.PI * 2;
+      const speed = 0.1 + Math.random() * 0.1;
+      p.vx = Math.cos(angle) * speed;
+      p.vy = 0.1 + Math.random() * 0.15;
+      p.vz = Math.sin(angle) * speed;
+      // Alternate green and gold
+      if (i % 2 === 0) {
+        p.r = 0.3; p.g = 1.0; p.b = 0.3;
+      } else {
+        p.r = 1.0; p.g = 0.85; p.b = 0.0;
+      }
+    }
+  }
+
   updateTrails(x, y, z, active) {
     for (let i = 0; i < this.trails.length; i++) {
       const trail = this.trails[i];
@@ -453,5 +651,6 @@ export class Effects {
     this.ambientLight.intensity = 0.6;
     this.dirLight.intensity = 0.8;
     this.pointLight.intensity = 0.5;
+    this._deactivateFlowAura();
   }
 }

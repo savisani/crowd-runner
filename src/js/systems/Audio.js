@@ -89,8 +89,29 @@ export class Audio {
     setTimeout(() => this._playTone(1568, 0.2, 'sine', 0.2), 240);
   }
 
+  playPerfectCombo3() {
+    this._playTone(880, 0.08, 'sine', 0.25);
+    setTimeout(() => this._playTone(1100, 0.08, 'sine', 0.25), 60);
+    setTimeout(() => this._playTone(1320, 0.12, 'sine', 0.2), 120);
+  }
+
+  playPerfectCombo5() {
+    this._playTone(660, 0.1, 'sine', 0.3);
+    setTimeout(() => this._playTone(880, 0.1, 'sine', 0.3), 80);
+    setTimeout(() => this._playTone(1100, 0.1, 'sine', 0.25), 160);
+    setTimeout(() => this._playTone(1320, 0.15, 'sine', 0.25), 240);
+    setTimeout(() => this._playTone(1760, 0.2, 'sine', 0.2), 320);
+  }
+
   playNearMiss() {
     this._playTone(660, 0.06, 'sine', 0.15);
     setTimeout(() => this._playTone(580, 0.08, 'sine', 0.12), 50);
+  }
+
+  playRivalDefeated() {
+    this._playTone(880, 0.1, 'sine', 0.3);
+    setTimeout(() => this._playTone(1100, 0.1, 'sine', 0.25), 80);
+    setTimeout(() => this._playTone(1320, 0.15, 'sine', 0.2), 160);
+    setTimeout(() => this._playTone(1760, 0.2, 'sine', 0.15), 240);
   }
 }

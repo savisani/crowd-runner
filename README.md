@@ -34,6 +34,10 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 | **Risk/Safe** | Risk targets give +3 crowd but are visually distinct; Safe give +1 |
 | **Moving NPCs** | Some NPCs telegraph and change lanes mid-approach |
 | **Near Miss** | Narrowly avoid obstacles or mismatched NPCs for feedback |
+| **Flow Aura** | 10-streak milestone triggers golden energy aura |
+| **Perfect Combo** | Chain perfect matches for escalating rewards |
+| **Crowd Formations** | Milestone crowd sizes trigger special formations |
+| **Rival Crowd** | Compete against AI runner with their own crowd |
 
 ---
 
@@ -58,6 +62,13 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Position:** Centered on lane X, ground level Y=0
 - **Collision:** Swept Z-overlap; jump clears if player Y > 1.8
 
+### Rival Crowd
+- **Entity:** `src/js/entities/Rival.js`
+- **Properties:** Shape, Color, Lane, Crowd Size, Perfect Sequence Progress, Defeat State
+- **Visuals:** Runner mesh (same scale as player), red glow ring, small crowd in V formation
+- **Behavior:** Auto-runs ahead of player, starts interaction when player approaches, requires perfect match sequence to defeat
+- **Rewards:** Defeat grants portion of rival's crowd (up to 3 members)
+
 ### Collision System
 - **File:** `src/js/systems/Collision.js`
 - **Player ↔ NPC:** Lane match + swept Z overlap + vertical tolerance → match/mismatch
@@ -67,8 +78,8 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 
 ### Spawning System
 - **File:** `src/js/systems/Spawner.js`
-- **Pools:** 20 NPCs, 8 Barriers (object pooling)
-- **Intervals:** NPC every ~70 frames, Barrier every ~110 frames (decreases with streak)
+- **Pools:** 20 NPCs, 8 Barriers, 2 Rivals (object pooling)
+- **Intervals:** NPC every ~70 frames, Barrier every ~110 frames, Rival every ~500 frames (decreases with streak)
 - **Minimum Gap:** 30 units between spawns of same type
 - **Validation:** All spawns use 3D bounds checking with safety margin + encounter-level Z separation
 
@@ -84,6 +95,7 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Formation:** Staggered rows (1-2-3-2-3 pattern) across lanes
 - **Following:** Smooth position/rotation interpolation behind player
 - **Bounce:** Visual feedback on streak milestones (5, 10)
+- **Milestone Formations:** Special formations at 10 (Tight V), 25 (Wide Spread), 50 (Grand Array) crowd members
 
 ### Streak System
 - **Increment:** +1 per successful match
@@ -106,6 +118,15 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
   - Lighting pulse
 - **No gameplay advantage** beyond feedback — streak and crowd rewards unchanged
 
+### Perfect Combo
+- **Counter:** Tracks consecutive Perfect Catches
+- **Thresholds:**
+  - **×3:** "PERFECT COMBO!" — audio fanfare, UI popup
+  - **×5:** "UNSTOPPABLE!" — enhanced audio, UI popup
+- **Reset:** On normal (non-perfect) match or mismatch (configurable: `PERFECT_COMBO_RESET_ON_NORMAL`)
+- **Independence:** Separate from normal streak — normal matches don't break streak, only perfect combo
+- **Feedback:** "PERFECT ×N" popup on each perfect match
+
 ### Near Miss
 - **Trigger:** Player passes within `NEAR_MISS_DISTANCE` (3.5 units) of:
   - Barrier in same lane (while not jumping)
@@ -117,6 +138,15 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
   - Subtle particle effect (15 particles, amber/orange)
   - Distinct audio cue (660→580 Hz descending)
 - **No reward** — purely feedback for mastery recognition
+
+### Near Miss Chain
+- **Counter:** Tracks consecutive Near Misses without collision/match
+- **Thresholds:**
+  - **2:** "RISKY!" — UI popup
+  - **3:** "DANGEROUS!" — UI popup
+- **Timeout:** `NEAR_MISS_CHAIN_TIMEOUT` (120 frames / ~2 seconds) without new near miss resets chain
+- **Reset:** On successful match, collision, or timeout
+- **Feedback:** Escalating tension without gameplay penalty
 
 ### Multi-target Encounters
 - **Probability:** 30% base, +1% per streak (max 50%)
@@ -131,6 +161,56 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Visual:** Red "+3" label with pulse animation
 - **Safe:** Green "+1" label
 - **Early Game:** First 30 seconds risk-free
+
+### Flow Aura (10 Streak)
+- **Trigger:** Every 10 streak (10, 20, 30...)
+- **Duration:** `FLOW_DURATION` (5 seconds)
+- **Visuals:**
+  - 3 pulsing gold rings around player (expanding/contracting)
+  - Continuous gold particle stream (12 particles, 1-2s lifetime)
+  - Player shape/color **unchanged** — always clearly identifiable
+- **UI:** "FLOW!" activation popup
+- **Gameplay:** No mechanical changes — purely visual celebration
+
+### Crowd Formation Milestones
+- **10 Crowd:** "TIGHT V" — compact wedge formation, reduced spacing
+- **25 Crowd:** "WIDE SPREAD" — expanded formation with extra rows
+- **50 Crowd:** "GRAND ARRAY" — large organized formation, 8 rows
+- **Duration:** 3 seconds (`formationDuration`)
+- **Transition:** Smooth interpolation between formations
+- **Gameplay:** No mechanical changes — visual celebration only
+
+### Rival Crowd
+- **Spawn:** After streak 15, 2% chance per spawn cycle, 300-frame cooldown
+- **Behavior:** Runs ahead in random lane, slows to wait for player
+- **Interaction:** Activates when player within 25 units
+- **Challenge:** Requires 3 consecutive Perfect Catches (`perfectSequenceRequired`)
+- **Failure:** Normal match resets sequence; mismatch ends interaction
+- **Defeat Reward:** Up to 3 crowd members join player (based on rival crowd size)
+- **Visuals:** Red glow ring distinguishes rival; small crowd in V formation
+- **Rarity:** Rare encounter — adds tension without overwhelming
+
+---
+
+## HUD Architecture (Fixed)
+
+**Problem:** HUD elements appeared to drift/move with camera shake.
+
+**Root Cause:** `#hud` used `position: absolute` inside `#game-container` (`position: relative`). While camera shake only affects Three.js camera, any transform on the container would affect absolute children.
+
+**Solution:** 
+- `#hud` now uses `position: fixed` with `transform: none !important` and `will-change: transform`
+- All dynamic popups (`streak-popup`, `near-miss-popup`, `perfect-combo-popup`, `flow-popup`, `rival-popup`, `milestone-title`, `milestone-subtitle`) use `position: fixed` with viewport-relative positioning
+- Camera shake/punch only modifies `camera.position` in Three.js — zero DOM impact
+
+**Result:** HUD remains visually locked to screen during:
+- Camera shake / punch
+- Lane switching
+- Jumping
+- Perfect Match / Perfect Catch
+- Near Miss
+- Flow Aura activation
+- Window resize / mobile rotation
 
 ---
 
@@ -159,12 +239,15 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
    - **Multi-target:** Validates each target + entire encounter zone against obstacles
    - **Moving NPC:** Spawn lane + target lane both validated; runtime swept-path check (10 samples)
    - **Barrier:** `_findSafeLaneForBarrier()` — checks encounter zone + bounds
+   - **Rival:** Lane validation + Z clearance from all active NPCs/barriers
 
 5. **Fallback:** If no safe lane found, falls back to lane-only Z-gap check (`_canSafelySpawnInLane`), then first valid lane
 
 6. **Moving NPC Runtime:** `_canNPCMoveToLane(npc, targetLane)` samples 10 points along lateral path; checks both AABB overlap AND Z-distance to barriers in start/target lanes
 
 **Lane ≠ Safety:** Same lane is allowed if Z separation + margins clear both objects' bounds. System evaluates X AND Z simultaneously.
+
+**Bounded Attempts:** All spawn searches capped at `MAX_SPAWN_ATTEMPTS` (8). Failed searches skip spawn gracefully — never freeze the game.
 
 ---
 
@@ -192,11 +275,12 @@ crowd-runner/
 │       │   ├── NPC.js         # NPC entity, movement, telegraph, lane change
 │       │   ├── Barrier.js     # Barrier entity, simple forward movement
 │       │   ├── Crowd.js       # Crowd formation, following, bounce
+│       │   ├── Rival.js       # Rival runner + crowd entity
 │       │   └── Track.js       # Infinite scrolling track segments
 │       ├── systems/
-│       │   ├── Spawner.js     # NPC/barrier spawning, pools, SPAWN SAFETY
+│       │   ├── Spawner.js     # NPC/barrier/rival spawning, pools, SPAWN SAFETY
 │       │   ├── Collision.js   # Player-NPC, Player-Barrier collision + Near Miss
-│       │   ├── Effects.js     # Particles, trails, screen shake, lighting
+│       │   ├── Effects.js     # Particles, trails, screen shake, lighting, Flow Aura
 │       │   └── Audio.js       # Web Audio API synthesis (no assets)
 │       └── ui/
 │           └── UI.js          # HUD, menus, streak bar, debug overlay
@@ -326,6 +410,8 @@ git push -u origin main
 | NPC/obstacle visual merge | Encounter Z-gap too small | Increase `NPC_OBSTACLE_SAME_LANE_GAP` / `NPC_OBSTACLE_VISUAL_GAP` |
 | Near Miss not triggering | Distance threshold | Adjust `NEAR_MISS_DISTANCE` in Config |
 | Perfect Catch not registering | Form change timing | Verify `PERFECT_MATCH_WINDOW` and player.lastFormChangeTime |
+| HUD drifting | Container transform | Ensure `#hud` uses `position: fixed` |
+| Game freezes | Unbounded spawn loop | Check `MAX_SPAWN_ATTEMPTS` in Spawner |
 
 ---
 
@@ -351,7 +437,13 @@ git push -u origin main
 - [x] Moving NPC barrier avoidance (runtime swept-path validation)
 - [x] Encounter-level visual Z separation (camera-aware)
 - [x] Near Miss detection (barrier + mismatched NPC)
-- [x] Particle effects (match, mismatch, crash, perfect, streak, perfect catch, near miss)
+- [x] Near Miss Chain (2/3 thresholds with escalating feedback)
+- [x] Perfect Combo (×3/×5 milestones, independent from streak)
+- [x] Flow Aura (10-streak, gold rings + particles, shape preserved)
+- [x] Crowd Formation Milestones (10/25/50, temporary formations)
+- [x] Rival Crowd (rare encounter, perfect sequence challenge, crowd reward)
+- [x] HUD fixed positioning (immune to camera shake/punch)
+- [x] Particle effects (match, mismatch, crash, perfect, streak, perfect catch, near miss, flow, rival)
 - [x] Camera punch / lighting pulse / screen shake
 - [x] Procedural audio (Web Audio API, zero assets)
 - [x] HUD (score, streak, crowd, shape indicator)

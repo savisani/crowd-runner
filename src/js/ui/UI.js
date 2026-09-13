@@ -235,6 +235,76 @@ export class UI {
     setTimeout(() => popup.remove(), 1000);
   }
 
+  showFlowActivation() {
+    const popup = document.createElement('div');
+    popup.className = 'flow-popup';
+    popup.textContent = 'FLOW!';
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 1500);
+  }
+
+  showPerfectCombo(count) {
+    const popup = document.createElement('div');
+    popup.className = 'perfect-combo-popup';
+    popup.textContent = `PERFECT ×${count}`;
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 800);
+  }
+
+  showPerfectComboMilestone(text) {
+    const popup = document.createElement('div');
+    popup.className = 'perfect-combo-popup';
+    popup.style.fontSize = '36px';
+    popup.textContent = text;
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 1200);
+  }
+
+  hidePerfectCombo() {
+    // Could add a fade-out effect for the perfect combo counter if needed
+  }
+
+  showNearMissChain(count) {
+    // Could show a small counter in the HUD for near miss chain
+  }
+
+  showNearMissChainMilestone(text) {
+    const popup = document.createElement('div');
+    popup.className = 'near-miss-popup';
+    popup.style.fontSize = '32px';
+    popup.style.color = '#ffaa00';
+    popup.style.textShadow = '0 0 20px rgba(255, 170, 0, 0.7)';
+    popup.textContent = text;
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 1200);
+  }
+
+  hideNearMissChain() {
+    // Could add a fade-out effect
+  }
+
+  showCrowdFormation(count) {
+    const labels = {
+      10: 'FORMATION: TIGHT V',
+      25: 'FORMATION: WIDE SPREAD',
+      50: 'FORMATION: GRAND ARRAY'
+    };
+    const popup = document.createElement('div');
+    popup.className = 'perfect-combo-popup';
+    popup.style.fontSize = '24px';
+    popup.textContent = labels[count] || `FORMATION: ${count}`;
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 1500);
+  }
+
+  showRivalDefeated(reward) {
+    const popup = document.createElement('div');
+    popup.className = 'rival-popup';
+    popup.textContent = `RIVAL DEFEATED! +${reward} CROWD`;
+    document.getElementById('game-container').appendChild(popup);
+    setTimeout(() => popup.remove(), 2000);
+  }
+
   _checkMilestones(streak) {
     clearTimeout(this._milestoneTimeout);
 

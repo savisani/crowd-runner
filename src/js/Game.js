@@ -22,6 +22,9 @@ export class Game {
     this.frameCount = 0;
 
     this.mismatchRecoveryTimer = 0;
+    this.perfectCombo = 0;
+    this.nearMissChain = 0;
+    this.nearMissChainTimer = 0;
 
     this._initRenderer();
     this._initScene();
@@ -134,6 +137,9 @@ export class Game {
     this.distanceTraveled = 0;
     this.frameCount = 0;
     this.mismatchRecoveryTimer = 0;
+    this.perfectCombo = 0;
+    this.nearMissChain = 0;
+    this.nearMissChainTimer = 0;
 
     this.player.reset();
     this.crowd.reset();
@@ -180,11 +186,24 @@ export class Game {
       this.ui.onStreakReset();
       this.ui.showStreakPopup('CRASH! -' + lostCrowd, true);
 
+      // Reset chains on barrier hit
+      this._resetPerfectCombo();
+      this._resetNearMissChain();
+
       for (const barrier of this.spawner.getActiveBarriers()) {
         if (barrier.active && barrier.processedThisFrame) {
           this.spawner.removeBarrier(barrier);
           break;
         }
+      }
+    }
+
+    // Handle Rival interaction
+    const rival = this.spawner.getActiveRival();
+    if (rival && rival.active && !rival.defeated) {
+      const rivalDist = rival.getDistanceToPlayer(pz);
+      if (rivalDist < 25) { // Interaction range
+        rival.startInteraction();
       }
     }
 
@@ -205,6 +224,14 @@ export class Game {
 
       this.speed = CONFIG.BASE_SPEED + Math.floor(this.streak / CONFIG.STREAK_SPEED_BONUS) * CONFIG.SPEED_INCREMENT;
       this.speed = Math.min(this.speed, CONFIG.MAX_SPEED);
+
+      // Check for rival perfect sequence
+      if (rival && rival.interactionActive) {
+        const defeated = rival.recordPerfectMatch();
+        if (defeated) {
+          this._onRivalDefeated(rival);
+        }
+      }
 
       this._onSuccessfulMatch(npc, isPerfect);
     }
@@ -229,6 +256,14 @@ export class Game {
       this.ui.onStreakReset();
       this.ui.updateCrowd(this.crowd.getCount());
       this.ui.showStreakPopup('WRONG! -' + lostCrowd, true);
+
+      // Reset perfect combo on mismatch
+      this._resetPerfectCombo();
+
+      // Rival interaction: mismatch ends sequence
+      if (rival && rival.interactionActive) {
+        rival.recordMismatch();
+      }
     }
 
     for (const nearMiss of results.nearMiss) {
@@ -264,7 +299,16 @@ export class Game {
 
     if (isPerfectMatch) {
       this.audio.playPerfect();
+      this._incrementPerfectCombo();
+    } else {
+      // Normal match resets perfect combo (optional, based on config)
+      if (CONFIG.PERFECT_COMBO_RESET_ON_NORMAL) {
+        this._resetPerfectCombo();
+      }
     }
+
+    // Successful match resets near miss chain
+    this._resetNearMissChain();
 
     this.effects.spawnMatchParticles(
       npc.group.position.x,
@@ -307,6 +351,39 @@ export class Game {
     if (isPerfectMatch) {
       this.effects.triggerPerfectCameraPunch();
     }
+
+    // Flow Aura at 10, 20, 30... streak milestones
+    if (this.streak > 0 && this.streak % CONFIG.FLOW_STREAK_THRESHOLD === 0) {
+      this.effects.triggerFlowAura(this.player.mesh, this.player.currentShape);
+      this.ui.showFlowActivation();
+    }
+
+    // Crowd formation milestones
+    const crowdCount = this.crowd.getCount();
+    if (CONFIG.CROWD_FORMATION_MILESTONES.includes(crowdCount)) {
+      this.crowd.triggerFormationMilestone(crowdCount);
+      this.ui.showCrowdFormation(crowdCount);
+    }
+  }
+
+  _incrementPerfectCombo() {
+    this.perfectCombo++;
+    this.ui.showPerfectCombo(this.perfectCombo);
+
+    if (this.perfectCombo === CONFIG.PERFECT_COMBO_THRESHOLD_3) {
+      this.audio.playPerfectCombo3();
+      this.ui.showPerfectComboMilestone('PERFECT COMBO!');
+    } else if (this.perfectCombo === CONFIG.PERFECT_COMBO_THRESHOLD_5) {
+      this.audio.playPerfectCombo5();
+      this.ui.showPerfectComboMilestone('UNSTOPPABLE!');
+    }
+  }
+
+  _resetPerfectCombo() {
+    if (this.perfectCombo > 0) {
+      this.perfectCombo = 0;
+      this.ui.hidePerfectCombo();
+    }
   }
 
   _onNearMiss(nearMiss) {
@@ -319,11 +396,47 @@ export class Game {
       this.audio.playNearMiss();
       this.effects.spawnNearMissParticles(x, y, z, 'barrier');
       this.ui.showNearMiss('NEAR MISS!', false);
+      this._incrementNearMissChain();
     } else if (type === 'mismatch') {
       this.audio.playNearMiss();
       this.effects.spawnNearMissParticles(x, y, z, 'npc');
       this.ui.showNearMiss('NEAR MISS!', false);
+      this._incrementNearMissChain();
     }
+  }
+
+  _incrementNearMissChain() {
+    this.nearMissChain++;
+    this.nearMissChainTimer = CONFIG.NEAR_MISS_CHAIN_TIMEOUT;
+
+    this.ui.showNearMissChain(this.nearMissChain);
+
+    if (this.nearMissChain === CONFIG.NEAR_MISS_CHAIN_THRESHOLD_2) {
+      this.ui.showNearMissChainMilestone('RISKY!');
+    } else if (this.nearMissChain === CONFIG.NEAR_MISS_CHAIN_THRESHOLD_3) {
+      this.ui.showNearMissChainMilestone('DANGEROUS!');
+    }
+  }
+
+  _resetNearMissChain() {
+    if (this.nearMissChain > 0) {
+      this.nearMissChain = 0;
+      this.nearMissChainTimer = 0;
+      this.ui.hideNearMissChain();
+    }
+  }
+
+  _onRivalDefeated(rival) {
+    // Reward: add some of rival's crowd to player
+    const reward = Math.min(rival.crowdSize, 3);
+    for (let i = 0; i < reward; i++) {
+      this.crowd.addMember(rival.shape);
+    }
+
+    this.ui.updateCrowd(this.crowd.getCount());
+    this.ui.showRivalDefeated(reward);
+    this.audio.playRivalDefeated();
+    this.effects.spawnRivalDefeatedParticles(rival.group.position.x, rival.group.position.y, rival.group.position.z);
   }
 
   _checkPerfectMatch() {
@@ -377,6 +490,14 @@ export class Game {
         this.track.getSurfaceY()
       );
 
+      // Decrement near miss chain timer
+      if (this.nearMissChainTimer > 0) {
+        this.nearMissChainTimer--;
+        if (this.nearMissChainTimer <= 0) {
+          this._resetNearMissChain();
+        }
+      }
+
       this.effects.updateTrails(
         this.player.mesh.position.x,
         this.player.mesh.position.y,
@@ -385,6 +506,7 @@ export class Game {
       );
       this.effects.updateLighting(this.streak, this.crowd.getCount());
       this.effects.updateBackground(this.player.mesh.position.z);
+      this.effects.updateFlowAura(this.player.mesh, dt);
       this._updateDebugOverlay();
     } else {
       this.effects.updateBackground(0);

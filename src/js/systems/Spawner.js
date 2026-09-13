@@ -1,6 +1,7 @@
 import { CONFIG } from '../engine/Config.js';
 import { NPC } from '../entities/NPC.js';
 import { Barrier } from '../entities/Barrier.js';
+import { Rival } from '../entities/Rival.js';
 import { ShapeFactory } from '../engine/ShapeFactory.js';
 
 export class Spawner {
@@ -10,13 +11,17 @@ export class Spawner {
     this.npcActive = [];
     this.barrierPool = [];
     this.barrierActive = [];
+    this.rivalPool = [];
+    this.rivalActive = null;
 
     this.npcSpawnTimer = 0;
     this.barrierSpawnTimer = 0;
+    this.rivalSpawnTimer = 0;
     this.lastSpawnLane = -1;
     this.lastSpawnType = '';
     this.distanceSinceLastNPC = 0;
     this.distanceSinceLastBarrier = 0;
+    this.distanceSinceLastRival = 0;
     this.gameStartTime = performance.now();
 
     for (let i = 0; i < 20; i++) {
@@ -24,6 +29,9 @@ export class Spawner {
     }
     for (let i = 0; i < 8; i++) {
       this.barrierPool.push(new Barrier());
+    }
+    for (let i = 0; i < 2; i++) {
+      this.rivalPool.push(new Rival());
     }
 
     this.maxNPCHalfWidth = ShapeFactory.getMaxNPCHalfWidth();
@@ -488,15 +496,41 @@ _spawnSingleNPC(streak) {
     this.lastSpawnType = 'barrier';
   }
 
+  _getRival() {
+    if (this.rivalPool.length > 0) return this.rivalPool.pop();
+    return new Rival();
+  }
+
+  _releaseRival(rival) {
+    rival.reset();
+    this.rivalPool.push(rival);
+  }
+
+  _spawnRival(streak) {
+    if (this.rivalActive) return; // Only one rival at a time
+
+    const rival = this._getRival();
+    const lanes = [0, 1, 2];
+    const lane = lanes[Math.floor(Math.random() * lanes.length)];
+
+    rival.init(this.scene, lane, -CONFIG.SPAWN_DISTANCE, streak);
+    this.rivalActive = rival;
+    this.lastSpawnLane = lane;
+    this.lastSpawnType = 'rival';
+  }
+
   update(speed, streak) {
     try {
       this.npcSpawnTimer++;
       this.barrierSpawnTimer++;
+      this.rivalSpawnTimer++;
       this.distanceSinceLastNPC += speed;
       this.distanceSinceLastBarrier += speed;
+      this.distanceSinceLastRival += speed;
 
       const adjustedNPCInterval = Math.max(35, CONFIG.NPC_SPAWN_INTERVAL - streak * 0.5);
       const adjustedBarrierInterval = Math.max(55, CONFIG.BARRIER_SPAWN_INTERVAL - streak * 0.3);
+      const adjustedRivalInterval = Math.max(500, CONFIG.RIVAL_SPAWN_COOLDOWN - streak * 2);
 
       if (this.npcSpawnTimer >= adjustedNPCInterval && this.distanceSinceLastNPC >= CONFIG.MIN_SPAWN_GAP) {
         this._spawnNPC(streak);
@@ -508,6 +542,16 @@ _spawnSingleNPC(streak) {
         this._spawnBarrier();
         this.barrierSpawnTimer = 0;
         this.distanceSinceLastBarrier = 0;
+      }
+
+      // Rival spawn - only after minimum streak and with low probability
+      if (streak >= CONFIG.RIVAL_SPAWN_MIN_STREAK &&
+          this.rivalSpawnTimer >= adjustedRivalInterval &&
+          this.distanceSinceLastRival >= CONFIG.MIN_SPAWN_GAP * 2 &&
+          Math.random() < CONFIG.RIVAL_SPAWN_PROBABILITY) {
+        this._spawnRival(streak);
+        this.rivalSpawnTimer = 0;
+        this.distanceSinceLastRival = 0;
       }
 
       for (let i = this.npcActive.length - 1; i >= 0; i--) {
@@ -570,6 +614,22 @@ _spawnSingleNPC(streak) {
           this.barrierActive.splice(i, 1);
         }
       }
+
+      // Update rival
+      if (this.rivalActive) {
+        try {
+          this.rivalActive.update(speed, 0); // playerZ not needed here, we pass 0
+        } catch (e) {
+          if (CONFIG.DEBUG_SPAWN) console.error('[Spawner] Rival update error:', e);
+          this._releaseRival(this.rivalActive);
+          this.rivalActive = null;
+        }
+
+        if (!this.rivalActive.active) {
+          this._releaseRival(this.rivalActive);
+          this.rivalActive = null;
+        }
+      }
     } catch (e) {
       if (CONFIG.DEBUG_SPAWN) console.error('[Spawner] Update error:', e);
     }
@@ -581,6 +641,10 @@ _spawnSingleNPC(streak) {
 
   getActiveBarriers() {
     return this.barrierActive;
+  }
+
+  getActiveRival() {
+    return this.rivalActive;
   }
 
   removeNPC(npc) {
@@ -600,7 +664,7 @@ _spawnSingleNPC(streak) {
     }
   }
 
-  reset() {
+reset() {
     this.npcActive.forEach(n => {
       n.deactivate(this.scene);
       this.npcPool.push(n);
@@ -613,10 +677,17 @@ _spawnSingleNPC(streak) {
     });
     this.barrierActive = [];
 
+    if (this.rivalActive) {
+      this._releaseRival(this.rivalActive);
+      this.rivalActive = null;
+    }
+
     this.npcSpawnTimer = 0;
     this.barrierSpawnTimer = 0;
+    this.rivalSpawnTimer = 0;
     this.distanceSinceLastNPC = 0;
     this.distanceSinceLastBarrier = 0;
+    this.distanceSinceLastRival = 0;
     this.gameStartTime = performance.now();
   }
 }
