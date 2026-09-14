@@ -10,84 +10,72 @@ export class Crowd {
     this.group = new THREE.Group();
     this.scene.add(this.group);
 
-    this.rowSizes = [1, 2, 3, 2, 3];
-    this.rowLaneIndices = [
-      [1],
-      [0, 2],
-      [0, 1, 2],
-      [0, 2],
-      [0, 1, 2]
-    ];
-
-    // Formation presets for milestones
     this.formations = {
       normal: {
-        rowLaneIndices: [
-          [1],
-          [0, 2],
-          [0, 1, 2],
-          [0, 2],
-          [0, 1, 2]
-        ],
-        rowSpacing: 1.4,
-        firstRowZ: 1.5,
-        lateralSpread: 1.0
+        rowSize: CONFIG.CROWD_ROW_SIZE,
+        rowSpacing: CONFIG.CROWD_ROW_SPACING,
+        firstRowZ: CONFIG.CROWD_FIRST_ROW_Z,
+        lateralSpacing: CONFIG.CROWD_LATERAL_SPACING,
       },
-      milestone10: { // Tight V / wedge
-        rowLaneIndices: [
-          [1],
-          [1],
-          [0, 2],
-          [0, 1, 2],
-          [0, 1, 2]
-        ],
-        rowSpacing: 1.2,
-        firstRowZ: 1.3,
-        lateralSpread: 0.8
+      milestone10: {
+        rowSize: CONFIG.CROWD_ROW_SIZE,
+        rowSpacing: CONFIG.CROWD_ROW_SPACING * 0.85,
+        firstRowZ: CONFIG.CROWD_FIRST_ROW_Z * 0.9,
+        lateralSpacing: CONFIG.CROWD_LATERAL_SPACING * 0.9,
       },
-      milestone25: { // Wider formation
-        rowLaneIndices: [
-          [1],
-          [0, 2],
-          [0, 1, 2],
-          [0, 1, 2],
-          [0, 1, 2],
-          [0, 1, 2]
-        ],
-        rowSpacing: 1.5,
-        firstRowZ: 1.6,
-        lateralSpread: 1.2
+      milestone25: {
+        rowSize: CONFIG.CROWD_ROW_SIZE + 1,
+        rowSpacing: CONFIG.CROWD_ROW_SPACING,
+        firstRowZ: CONFIG.CROWD_FIRST_ROW_Z,
+        lateralSpacing: CONFIG.CROWD_LATERAL_SPACING * 0.95,
       },
-      milestone50: { // Large organized formation
-        rowLaneIndices: [
-          [1],
-          [0, 2],
-          [0, 1, 2],
-          [0, 1, 2],
-          [0, 1, 2],
-          [0, 1, 2],
-          [0, 1, 2],
-          [0, 1, 2]
-        ],
-        rowSpacing: 1.3,
-        firstRowZ: 1.4,
-        lateralSpread: 1.0
+      milestone50: {
+        rowSize: CONFIG.CROWD_ROW_SIZE + 2,
+        rowSpacing: CONFIG.CROWD_ROW_SPACING * 0.9,
+        firstRowZ: CONFIG.CROWD_FIRST_ROW_Z * 0.95,
+        lateralSpacing: CONFIG.CROWD_LATERAL_SPACING * 0.85,
       }
     };
 
     this.currentFormation = 'normal';
     this.formationTimer = 0;
-    this.formationDuration = 180; // 3 seconds at 60fps
+    this.formationDuration = 180;
     this.formationTransitioning = false;
     this.prevFormation = null;
 
-    this.maxMemberDepth = CONFIG.PLAYER_SIZE * 2 * 0.45;
-    this.rowSpacing = Math.max(1.05, this.maxMemberDepth + 0.55);
-    this.firstRowZ = Math.max(1.5, this.maxMemberDepth + 0.85);
-    this.rearSpawnOffset = this.rowSpacing * 2.1;
     this.memberSmoothing = 7;
     this.laneSmoothing = 9;
     this.forwardRotation = Math.PI;
+
+    this.visiblePool = [];
+    this.visiblePoolSize = CONFIG.CROWD_VISIBLE_MAX;
+    this._initVisiblePool();
+  }
+
+  _initVisiblePool() {
+    const shapes = CONFIG.SHAPES;
+    for (let i = 0; i < this.visiblePoolSize; i++) {
+      const shape = shapes[i % shapes.length];
+      const color = CONFIG.COLORS[shape];
+      const mesh = ShapeFactory.createShape(shape, color, CONFIG.CROWD_FOLLOWER_SCALE);
+      mesh.visible = false;
+      mesh.userData.poolIndex = i;
+      this.group.add(mesh);
+      this.visiblePool.push({
+        mesh,
+        logicalIndex: -1,
+        active: false,
+        targetX: 0,
+        targetY: 0,
+        targetZ: 0,
+        jitterX: 0,
+        jitterZ: 0,
+        rotationOffset: 0,
+        bounceTimer: 0,
+        bounceIntensity: 0,
+        bounceDuration: 0,
+      });
+    }
   }
 
   triggerFormationMilestone(count) {
@@ -103,232 +91,41 @@ export class Crowd {
 
   _transitionToFormation(formationKey) {
     if (this.currentFormation === formationKey) return;
-
     this.prevFormation = this.currentFormation;
     this.currentFormation = formationKey;
     this.formationTimer = this.formationDuration;
     this.formationTransitioning = true;
-
-    // Apply new formation parameters immediately for slot calculation
-    const formation = this.formations[formationKey];
-    this.rowLaneIndices = formation.rowLaneIndices;
-    this.rowSpacing = formation.rowSpacing;
-    this.firstRowZ = formation.firstRowZ;
-
-    // Recalculate member slots for smooth transition
-    const slots = this._getFormationSlots(this.members.length);
-    this.members.forEach((member, i) => {
-      if (slots[i]) {
-        member.userData.targetX = slots[i].x + member.userData.jitterX;
-        member.userData.targetZ = slots[i].z + member.userData.jitterZ;
-      }
-    });
   }
 
   _updateFormation(dt) {
     if (!this.formationTransitioning) return;
-
     this.formationTimer -= dt * 60;
     if (this.formationTimer <= 0) {
-      // Transition back to normal formation
       this.currentFormation = 'normal';
       this.formationTransitioning = false;
       this.prevFormation = null;
-
-      const normalFormation = this.formations.normal;
-      this.rowLaneIndices = normalFormation.rowLaneIndices;
-      this.rowSpacing = normalFormation.rowSpacing;
-      this.firstRowZ = normalFormation.firstRowZ;
-
-      // Recalculate slots
-      const slots = this._getFormationSlots(this.members.length);
-      this.members.forEach((member, i) => {
-        if (slots[i]) {
-          member.userData.targetX = slots[i].x + member.userData.jitterX;
-          member.userData.targetZ = slots[i].z + member.userData.jitterZ;
-        }
-      });
     }
   }
 
-  update(playerX, playerZ, playerMesh, dt = 1, trackSurfaceY) {
-    const frameDt = Math.max(0.0001, dt);
-    const laneBlend = 1 - Math.exp(-this.laneSmoothing * frameDt);
-    const memberBlend = 1 - Math.exp(-this.memberSmoothing * frameDt);
-    const surfaceY = this._getTrackSurfaceY(trackSurfaceY);
-    const slots = this._getFormationSlots(this.members.length);
-
-    this._updateFormation(frameDt);
-
-    this.group.position.x += (playerX - this.group.position.x) * laneBlend;
-    this.group.position.y = 0;
-    this.group.position.z = playerZ;
-
-    for (let i = 0; i < this.members.length; i++) {
-      const member = this.members[i];
-      const ud = member.userData;
-      const slot = slots[i];
-
-      ud.targetX = slot.x + ud.jitterX;
-      ud.targetY = surfaceY + this._getHalfHeight(member);
-      ud.targetZ = slot.z + ud.jitterZ;
-
-      let yOffset = 0;
-      if (ud.bounceTimer > 0 && ud.bounceIntensity) {
-        const bounceProgress = ud.bounceTimer / ud.bounceDuration;
-        yOffset = ud.bounceIntensity * Math.sin(bounceProgress * Math.PI);
-        ud.bounceTimer--;
-      }
-
-      const effectiveTargetY = ud.targetY + yOffset;
-
-      member.position.x += (ud.targetX - member.position.x) * memberBlend;
-      member.position.y += (effectiveTargetY - member.position.y) * memberBlend;
-      member.position.z += (ud.targetZ - member.position.z) * memberBlend;
-
-      const targetRotation = this.forwardRotation + ud.rotationOffset;
-      let rotationDelta = targetRotation - member.rotation.y;
-      rotationDelta = ((rotationDelta + Math.PI) % (Math.PI * 2)) - Math.PI;
-      member.rotation.y += rotationDelta * memberBlend;
-    }
-  }
-
-  addMember(shape) {
-    if (this.members.length >= CONFIG.MAX_CROWD) return false;
-
-    const color = CONFIG.COLORS[shape];
-    const mesh = ShapeFactory.createShape(shape, color, 0.45);
-    const slotIndex = this.members.length;
-    const slots = this._getFormationSlots(this.members.length + 1);
-    const slot = slots[slotIndex];
-    const jitterX = (Math.random() - 0.5) * 0.24;
-    const jitterZ = (Math.random() - 0.5) * 0.16;
-    const rotationOffset = (Math.random() - 0.5) * 0.22;
-    const groundY = this._getGroundY(mesh);
-    const targetX = slot.x + jitterX;
-    const targetZ = slot.z + jitterZ;
-
-    mesh.position.set(
-      targetX,
-      groundY,
-      targetZ + this.rearSpawnOffset
-    );
-    mesh.rotation.set(0, this.forwardRotation + rotationOffset, 0);
-    mesh.userData = {
-      slotIndex,
-      jitterX,
-      jitterZ,
-      rotationOffset,
-      targetX,
-      targetY: groundY,
-      targetZ,
-      bounceTimer: 0,
-      bounceIntensity: 0,
-      bounceDuration: 0
-    };
-
-    this.group.add(mesh);
-    this.members.push(mesh);
-    return true;
-  }
-
-  removeMembers(count) {
-    const toRemove = Math.min(count, this.members.length);
-    for (let i = 0; i < toRemove; i++) {
-      const member = this.members.pop();
-      if (member) {
-        this._disposeMember(member);
-      }
-    }
-    return toRemove;
-  }
-
-  getMembersToRemove(count) {
-    return Math.min(count, this.members.length);
-  }
-
-  update(playerX, playerZ, playerMesh, dt = 1, trackSurfaceY) {
-    const frameDt = Math.max(0.0001, dt);
-    const laneBlend = 1 - Math.exp(-this.laneSmoothing * frameDt);
-    const memberBlend = 1 - Math.exp(-this.memberSmoothing * frameDt);
-    const surfaceY = this._getTrackSurfaceY(trackSurfaceY);
-    const slots = this._getFormationSlots(this.members.length);
-
-    this.group.position.x += (playerX - this.group.position.x) * laneBlend;
-    this.group.position.y = 0;
-    this.group.position.z = playerZ;
-
-    for (let i = 0; i < this.members.length; i++) {
-      const member = this.members[i];
-      const ud = member.userData;
-      const slot = slots[i];
-
-      ud.targetX = slot.x + ud.jitterX;
-      ud.targetY = surfaceY + this._getHalfHeight(member);
-      ud.targetZ = slot.z + ud.jitterZ;
-
-      let yOffset = 0;
-      if (ud.bounceTimer > 0 && ud.bounceIntensity) {
-        const bounceProgress = ud.bounceTimer / ud.bounceDuration;
-        yOffset = ud.bounceIntensity * Math.sin(bounceProgress * Math.PI);
-        ud.bounceTimer--;
-      }
-
-      const effectiveTargetY = ud.targetY + yOffset;
-
-      member.position.x += (ud.targetX - member.position.x) * memberBlend;
-      member.position.y += (effectiveTargetY - member.position.y) * memberBlend;
-      member.position.z += (ud.targetZ - member.position.z) * memberBlend;
-
-      const targetRotation = this.forwardRotation + ud.rotationOffset;
-      let rotationDelta = targetRotation - member.rotation.y;
-      rotationDelta = ((rotationDelta + Math.PI) % (Math.PI * 2)) - Math.PI;
-      member.rotation.y += rotationDelta * memberBlend;
-    }
-  }
-
-  bounceMembers(streak) {
-    const intensity = streak >= 10 ? 0.3 : streak === 5 ? 0.2 : 0.1;
-    const duration = streak >= 10 ? 12 : streak === 5 ? 10 : 6;
-
-    for (const member of this.members) {
-      member.userData.bounceIntensity = intensity;
-      member.userData.bounceDuration = duration;
-      member.userData.bounceTimer = duration;
-      member.userData.baseY = member.userData.targetY;
-    }
-  }
-
-  getCount() {
-    return this.members.length;
-  }
-
-  reset() {
-    this.members.forEach(member => {
-      member.userData.bounceTimer = 0;
-      member.userData.bounceIntensity = 0;
-      member.userData.bounceDuration = 0;
-      this._disposeMember(member);
-    });
-    this.members = [];
-    this.group.position.set(0, 0, 0);
+  _getFormationConfig() {
+    return this.formations[this.currentFormation] || this.formations.normal;
   }
 
   _getFormationSlots(count) {
+    const cfg = this._getFormationConfig();
     const slots = [];
     let remaining = count;
     let row = 0;
 
     while (remaining > 0) {
-      const rowPattern = row % this.rowLaneIndices.length;
-      const laneIndices = this.rowLaneIndices[rowPattern];
-      const rowSize = Math.min(laneIndices.length, remaining);
-      const rowZ = this.firstRowZ + row * this.rowSpacing;
+      const rowSize = Math.min(cfg.rowSize, remaining);
+      const rowZ = cfg.firstRowZ + row * cfg.rowSpacing;
+      const rowOffset = -(rowSize - 1) * cfg.lateralSpacing * 0.5;
 
       for (let col = 0; col < rowSize; col++) {
         slots.push({
-          x: CONFIG.LANE_POSITIONS[laneIndices[col]],
-          z: rowZ
+          x: rowOffset + col * cfg.lateralSpacing,
+          z: rowZ,
         });
       }
 
@@ -339,35 +136,152 @@ export class Crowd {
     return slots;
   }
 
-  _getGroundY(mesh) {
-    return this._getTrackSurfaceY() + this._getHalfHeight(mesh);
+  update(playerX, playerZ, playerMesh, dt = 1, trackSurfaceY) {
+    const frameDt = Math.max(0.0001, dt);
+    const laneBlend = 1 - Math.exp(-this.laneSmoothing * frameDt);
+    const memberBlend = 1 - Math.exp(-this.memberSmoothing * frameDt);
+    const surfaceY = this._getTrackSurfaceY(trackSurfaceY);
+
+    this._updateFormation(frameDt);
+
+    this.group.position.x += (playerX - this.group.position.x) * laneBlend;
+    this.group.position.y = 0;
+    this.group.position.z = playerZ;
+
+    const slots = this._getFormationSlots(this.members.length);
+
+    const visibleIndices = [];
+    for (let i = 0; i < this.members.length; i++) {
+      const memberData = this.members[i];
+      const slot = slots[i];
+      if (!slot) continue;
+
+      const worldZ = playerZ + slot.z;
+      const isVisible = worldZ > playerZ - 2 && worldZ < playerZ + 25;
+
+      if (isVisible && visibleIndices.length < this.visiblePoolSize) {
+        visibleIndices.push(i);
+      }
+    }
+
+    for (let p = 0; p < this.visiblePoolSize; p++) {
+      const poolEntry = this.visiblePool[p];
+      if (p < visibleIndices.length) {
+        const i = visibleIndices[p];
+        const memberData = this.members[i];
+        const slot = slots[i];
+
+        poolEntry.mesh.visible = true;
+        poolEntry.logicalIndex = i;
+        poolEntry.active = true;
+
+        const targetX = slot.x + memberData.jitterX;
+        const targetY = surfaceY + this._getHalfHeight(poolEntry.mesh);
+        const targetZ = slot.z + memberData.jitterZ;
+
+        let yOffset = 0;
+        if (memberData.bounceTimer > 0 && memberData.bounceIntensity) {
+          const bounceProgress = memberData.bounceTimer / memberData.bounceDuration;
+          yOffset = memberData.bounceIntensity * Math.sin(bounceProgress * Math.PI);
+          memberData.bounceTimer--;
+        }
+
+        poolEntry.mesh.position.x += (targetX - poolEntry.mesh.position.x) * memberBlend;
+        poolEntry.mesh.position.y += (targetY + yOffset - poolEntry.mesh.position.y) * memberBlend;
+        poolEntry.mesh.position.z += (targetZ - poolEntry.mesh.position.z) * memberBlend;
+
+        const targetRotation = this.forwardRotation + memberData.rotationOffset;
+        let rotationDelta = targetRotation - poolEntry.mesh.rotation.y;
+        rotationDelta = ((rotationDelta + Math.PI) % (Math.PI * 2)) - Math.PI;
+        poolEntry.mesh.rotation.y += rotationDelta * memberBlend;
+
+        if (poolEntry.mesh.material.color.getHex() !== CONFIG.COLORS[memberData.shape]) {
+          poolEntry.mesh.material.color.setHex(CONFIG.COLORS[memberData.shape]);
+        }
+      } else {
+        poolEntry.mesh.visible = false;
+        poolEntry.active = false;
+        poolEntry.logicalIndex = -1;
+      }
+    }
+  }
+
+  addMember(shape) {
+    if (this.members.length >= CONFIG.MAX_CROWD) return false;
+
+    const jitterX = (Math.random() - 0.5) * 0.2;
+    const jitterZ = (Math.random() - 0.5) * 0.12;
+    const rotationOffset = (Math.random() - 0.5) * 0.18;
+
+    this.members.push({
+      shape,
+      jitterX,
+      jitterZ,
+      rotationOffset,
+      bounceTimer: 0,
+      bounceIntensity: 0,
+      bounceDuration: 0,
+    });
+
+    return true;
+  }
+
+  removeMembers(count) {
+    const toRemove = Math.min(count, this.members.length);
+    this.members.splice(this.members.length - toRemove, toRemove);
+    return toRemove;
+  }
+
+  getMembersToRemove(count) {
+    return Math.min(count, this.members.length);
+  }
+
+  bounceMembers(streak) {
+    const intensity = streak >= 10 ? 0.3 : streak === 5 ? 0.2 : 0.1;
+    const duration = streak >= 10 ? 12 : streak === 5 ? 10 : 6;
+
+    for (const member of this.members) {
+      member.bounceIntensity = intensity;
+      member.bounceDuration = duration;
+      member.bounceTimer = duration;
+    }
+  }
+
+  getCount() {
+    return this.members.length;
+  }
+
+  reset() {
+    this.members = [];
+    this.group.position.set(0, 0, 0);
+    this.currentFormation = 'normal';
+    this.formationTimer = 0;
+    this.formationTransitioning = false;
+    this.prevFormation = null;
+
+    for (const poolEntry of this.visiblePool) {
+      poolEntry.mesh.visible = false;
+      poolEntry.active = false;
+      poolEntry.logicalIndex = -1;
+    }
   }
 
   _getTrackSurfaceY(trackSurfaceY) {
     if (typeof trackSurfaceY === 'number' && Number.isFinite(trackSurfaceY)) {
       return trackSurfaceY;
     }
-
     if (this.track && typeof this.track.getSurfaceY === 'function') {
       return this.track.getSurfaceY();
     }
-
     return 0;
   }
 
-  _getHalfHeight(member) {
-    member.geometry.computeBoundingBox();
-    const box = member.geometry.boundingBox;
-    if (!box) return CONFIG.PLAYER_SIZE * 0.45;
-
-    const scaledHeight = (box.max.y - box.min.y) * Math.abs(member.scale.y);
+  _getHalfHeight(mesh) {
+    if (!mesh.geometry) return CONFIG.CROWD_FOLLOWER_SCALE;
+    mesh.geometry.computeBoundingBox();
+    const box = mesh.geometry.boundingBox;
+    if (!box) return CONFIG.CROWD_FOLLOWER_SCALE;
+    const scaledHeight = (box.max.y - box.min.y) * Math.abs(mesh.scale.y);
     return scaledHeight * 0.5;
-  }
-
-  _disposeMember(member) {
-    if (member.parent) {
-      member.parent.remove(member);
-    }
-    member.material.dispose();
   }
 }

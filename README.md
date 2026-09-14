@@ -86,6 +86,22 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Minimum Gap:** 30 units between spawns of same type
 - **Validation:** All spawns use 3D bounds checking with safety margin + encounter-level Z separation
 
+### Opening Encounter System
+- **Duration:** First ~10 seconds of each run
+- **Purpose:** Teach player core mechanics through curated encounters
+- **Sequence:** 12 carefully designed steps that introduce NPCs, obstacles, multi-targets, and empty recovery sections
+- **Lane Distribution:** Encounters rotate across left, center, and right lanes
+- **Transition:** Seamlessly transitions into procedural generation after sequence completes
+- **Safety:** No impossible combinations, no spam obstacles, easy-to-understand pacing
+
+### Encounter Variety
+- **Lane Distribution:** Weighted randomization ensures encounters spread across all lanes
+- **Encounter Types:** Single NPC, multi-target (2-3 NPCs), moving NPC, barrier, empty recovery
+- **Safety Gap:** Z-separation ensures clear visual distinction between encounters
+- **Risk/Safe:** 40% chance of risk targets (+3 crowd) after early game
+- **Multi-target:** 30% base probability, scales with streak
+- **Moving NPCs:** 7.5% base probability, telegraph before lane change
+
 ### Moving NPC System
 - **Probability:** 7.5% base, increases with streak (max 15%)
 - **Telegraph:** 30-unit timer with visual wobble before move
@@ -95,10 +111,13 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 
 ### Crowd System
 - **File:** `src/js/entities/Crowd.js`
-- **Formation:** Staggered rows (1-2-3-2-3 pattern) across lanes
+- **Formation:** 5 followers per row in compact grid behind player
 - **Following:** Smooth position/rotation interpolation behind player
 - **Bounce:** Visual feedback on streak milestones (5, 10)
 - **Milestone Formations:** Special formations at 10 (Tight V), 25 (Wide Spread), 50 (Grand Array) crowd members
+- **Object Pooling:** Pre-allocated pool of 50 visible follower meshes; off-screen followers recycled
+- **Size:** Followers are 25-40% of player size for clear visual hierarchy
+- **Optimization:** Logical crowd count (up to 1000) decoupled from visible rendering (max 50)
 
 ### Streak System
 - **Increment:** +1 per successful match
@@ -165,16 +184,47 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Safe:** Green "+1" label
 - **Early Game:** First 30 seconds risk-free
 
-### Flow Aura (10 Streak)
-- **Trigger:** Every 10 streak (10, 20, 30...)
-- **Duration:** `FLOW_DURATION` (5 seconds)
-- **Visuals:**
-  - 3 pulsing gold rings around player (expanding/contracting)
-  - Continuous gold particle stream (12 particles, 1-2s lifetime)
-  - **Fixed center flame issue:** Particles now spawn in a ring around the player to avoid the center, keeping the player's shape clearly visible
-  - Player shape/color **unchanged** — always clearly identifiable
-- **UI:** "FLOW!" activation popup
+### Milestone Aura System
+- **Trigger:** Every 10 streak (10, 20, 30, 40, 50)
+- **Level = floor(streak / 10)**
+- **Persistence:** Aura level persists until the next milestone (does NOT time out)
+- **Player Preservation:** Player shape/color NEVER changes — only surrounding energy changes
+- **Level 1 (10 streak):** Medium intensity flame aura — energetic flame movement, moderate particles, bright but controlled, gold-orange energy rising around player
+- **Level 2 (20 streak):** Stronger flames + red/orange shift — increased flame size, speed, particle density, glow intensity, vertical height, turbulence
+- **Level 3 (30 streak):** Dramatic flames — much taller aura, red/orange core with bright energy tips, larger particles, stronger turbulence, small energy bursts, subtle ground energy effect
+- **Level 4 (40 streak):** Intense flames — further increased all parameters, deep red core with yellow-white tips
+- **Level 5 (50 streak):** Maximum flames — all parameters at cap, most dramatic visual state
+- **Implementation:** Cone-shaped flame tongues arranged around player, animated with flickering, rising motion, and opacity pulsing. Spark particles rise upward. Point light provides glow. All flame meshes use additive blending with depthWrite disabled.
+- **UI:** "FLOW LEVEL N" popup on upgrade
 - **Gameplay:** No mechanical changes — purely visual celebration
+
+### Aura Architecture
+- **Root Cause Fix:** Flame aura meshes are scene children with per-frame position updates relative to player position
+- **Aura Light:** PointLight positioned at player location with pulsing intensity
+- **Cleanup:** `deactivateFlameAura()` properly hides all meshes, resets opacity, and disables light
+- **Reset:** Full cleanup on game restart — no residual effects between runs
+- **Coordinate System:** Flame positions calculated in player-local space, then transformed to world space
+
+### Coin System
+- **Earned by:** Successful NPC recruitment (matching shape collision)
+- **Normal Match:** +1 coin
+- **Perfect Match:** +2 coins (configurable: `COIN_PER_PERFECT_MATCH`)
+- **NOT awarded for:** Random taps, shape changes without match, obstacle hits, mismatched NPCs
+- **HUD:** Coin counter in top-right of HUD (screen-space, immune to camera effects)
+- **Animation:** Brief "+N" coin burst animation floats upward on earn
+- **Persistence:** Coins persist during current run only. No permanent storage.
+- **Visual:** Gold coin icon (CSS-styled) + counter number in HUD
+
+### Cosmic Environment
+- **Background:** Deep space environment with stars, planets, moons, nebulae, and distant galaxies
+- **Star Fields:** Three layers at different depths for parallax effect (white, blue-tinted, warm-tinted)
+- **Planets:** Giant blue planet, red/orange planet, ringed planet — all distant and non-interactive
+- **Moons:** Small gray moons scattered in background
+- **Nebulae:** Subtle purple/blue gas clouds with additive blending
+- **Distant Galaxies:** Circular sprites with faint glow
+- **Parallax:** Each layer moves at different speed based on depth multiplier
+- **Performance:** Lightweight geometry (low-poly spheres, simple materials) — minimal GPU cost
+- **Readability:** Background never interferes with gameplay — track and NPCs remain primary focus
 
 ### Crowd Formation Milestones
 - **10 Crowd:** "TIGHT V" — compact wedge formation, reduced spacing
@@ -183,6 +233,17 @@ A fast-paced 3D endless runner where you build a crowd by matching shapes. Run t
 - **Duration:** 3 seconds (`formationDuration`)
 - **Transition:** Smooth interpolation between formations
 - **Gameplay:** No mechanical changes — visual celebration only
+
+### Virtual Crowd Rendering
+- **Architecture:** Logical crowd count (up to 1000) decoupled from visible mesh count (max 50)
+- **Object Pool:** Pre-allocated pool of50 follower meshes at initialization
+- **Formation:** 5 followers per row in compact grid directly behind player
+- **Size:** Followers are 25-40% of player size for clear visual hierarchy
+- **Off-Screen Culling:** Followers outside visible Z-range (-2 to +25 units from player) are hidden
+- **Recycling:** When follower leaves visible range, its pool slot is reassigned to nearest visible follower
+- **Variation:** Small random offsets in position, rotation, and bounce timing for natural appearance
+- **Performance:** Only50 meshes active at any time regardless of logical crowd size
+- **Milestone Formations:** Temporary formation changes at 10/25/50 crowd members
 
 ### Rival Crowd
 - **Spawn:** After streak 15, 2% chance per spawn cycle, 300-frame cooldown
@@ -448,11 +509,12 @@ git push -u origin main
 - [x] Near Miss detection (barrier + mismatched NPC)
 - [x] Near Miss Chain (2/3 thresholds with escalating feedback)
 - [x] Perfect Combo (×3/×5 milestones, independent from streak)
-- [x] Flow Aura (10-streak, gold rings + particles, shape preserved)
+- [x] Milestone Aura System (10/20/30/40/50 streak, persistent flame/energy aura, player shape preserved)
 - [x] Crowd Formation Milestones (10/25/50, temporary formations)
 - [x] Rival Crowd (rare encounter, perfect sequence challenge, crowd reward)
 - [x] HUD fixed positioning (immune to camera shake/punch)
-- [x] Particle effects (match, mismatch, crash, perfect, streak, perfect catch, near miss, flow, rival)
+- [x] Coin System (+1 per match, +2 perfect match, HUD counter, burst animation)
+- [x] Particle effects (match, mismatch, crash, perfect, streak, perfect catch, near miss, aura, coin, rival)
 - [x] Camera punch / lighting pulse / screen shake
 - [x] Procedural audio (Web Audio API, zero assets)
 - [x] HUD (score, streak, crowd, shape indicator)
@@ -460,8 +522,11 @@ git push -u origin main
 - [x] Capacitor Android configuration
 - [x] Production build (Vite)
 - [x] **Dynamic Music** (procedural melodic loop, streak-based intensity)
-- [x] **Fixed Flow Aura Center** (particles spawn in ring to avoid center flame)
-- [ ] Virtual Crowd Rendering
+- [x] Opening encounter system (curated first ~10 seconds)
+- [x] Encounter variety (weighted lane distribution, multiple encounter types)
+- [x] Virtual crowd rendering (object pooling, off-screen culling, 5-per-row formation)
+- [x] Cosmic background environment (stars, planets, nebulae, parallax)
+- [x] Aura architecture fix (proper cleanup, no stuck effects)
 - [ ] Branching Tracks
 
 ---

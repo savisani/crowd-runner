@@ -20,6 +20,8 @@ export class Game {
     this.speed = CONFIG.BASE_SPEED;
     this.distanceTraveled = 0;
     this.frameCount = 0;
+    this.coins = 0;
+    this.currentAuraLevel = 0;
 
     this.mismatchRecoveryTimer = 0;
     this.perfectCombo = 0;
@@ -137,6 +139,9 @@ export class Game {
     this.speed = CONFIG.BASE_SPEED;
     this.distanceTraveled = 0;
     this.frameCount = 0;
+    this.coins = 0;
+    this.currentAuraLevel = 0;
+
     this.mismatchRecoveryTimer = 0;
     this.perfectCombo = 0;
     this.nearMissChain = 0;
@@ -152,6 +157,7 @@ export class Game {
     this.ui.updateStreak(0);
     this.ui.onStreakReset();
     this.ui.updateCrowd(0);
+    this.ui.updateCoins(0);
     this.ui.updateShapeIndicator(this.player.currentShape);
     this.state = 'playing';
     this.audio.startMusic();
@@ -354,10 +360,18 @@ export class Game {
       this.effects.triggerPerfectCameraPunch();
     }
 
-    // Flow Aura at 10, 20, 30... streak milestones
-    if (this.streak > 0 && this.streak % CONFIG.FLOW_STREAK_THRESHOLD === 0) {
-      this.effects.triggerFlowAura(this.player.mesh, this.player.currentShape);
-      this.ui.showFlowActivation();
+    // Persistent milestone aura upgrade
+    const auraLevel = Math.floor(this.streak / CONFIG.FLOW_STREAK_THRESHOLD);
+    if (auraLevel > this.currentAuraLevel && auraLevel <= CONFIG.FLOW_AURA_MAX_LEVEL) {
+      this.currentAuraLevel = auraLevel;
+      this.effects.activateFlameAura(auraLevel);
+      this.ui.showAuraUpgrade(auraLevel);
+      this.audio.playMilestone(this.streak);
+      this.effects.spawnCoinBurst(
+        this.player.mesh.position.x,
+        this.player.mesh.position.y,
+        this.player.mesh.position.z
+      );
     }
 
     // Crowd formation milestones
@@ -446,6 +460,13 @@ export class Game {
     return timeSinceChange <= CONFIG.PERFECT_MATCH_WINDOW && timeSinceChange > 0;
   }
 
+  _getCoinReward(isPerfectMatch) {
+    if (isPerfectMatch) {
+      return CONFIG.COIN_PER_PERFECT_MATCH;
+    }
+    return CONFIG.COIN_PER_MATCH;
+  }
+
   _gameOver() {
     this.audio.stopMusic();
     this.state = 'gameover';
@@ -493,7 +514,6 @@ export class Game {
         this.track.getSurfaceY()
       );
 
-      // Decrement near miss chain timer
       if (this.nearMissChainTimer > 0) {
         this.nearMissChainTimer--;
         if (this.nearMissChainTimer <= 0) {
@@ -508,9 +528,9 @@ export class Game {
         true
       );
       this.effects.updateLighting(this.streak, this.crowd.getCount());
-      this.effects.updateMusicIntensity(this.streak);
+      this.audio.updateMusicIntensity(this.streak);
       this.effects.updateBackground(this.player.mesh.position.z);
-      this.effects.updateFlowAura(this.player.mesh, dt);
+      this.effects.updateFlameAura(this.player.mesh.position, dt);
       this._updateDebugOverlay();
     } else {
       this.effects.updateBackground(0);

@@ -4,6 +4,8 @@ export class UI {
       hud: document.getElementById('hud'),
       streakValue: document.getElementById('streak-value'),
       crowdValue: document.getElementById('crowd-value'),
+      coinValue: document.getElementById('coin-value'),
+      coinIcon: document.getElementById('coin-icon'),
       shapeIcon: document.getElementById('shape-icon'),
       startScreen: document.getElementById('start-screen'),
       startBtn: document.getElementById('start-btn'),
@@ -23,6 +25,8 @@ export class UI {
     this._streakFloatTimeout = null;
     this._milestoneTimeout = null;
     this._progressAnimTimeout = null;
+    this._coinAnimTimeout = null;
+    this._coinBurstElements = [];
   }
 
   showHUD() {
@@ -46,6 +50,46 @@ export class UI {
 
   updateCrowd(value) {
     this.elements.crowdValue.textContent = value;
+  }
+
+  updateCoins(value) {
+    if (this.elements.coinValue) {
+      this.elements.coinValue.textContent = value;
+    }
+  }
+
+  showCoinAnimation(amount) {
+    const container = document.getElementById('game-container');
+    if (!container) return;
+
+    const anim = document.createElement('div');
+    anim.className = 'coin-burst';
+    anim.innerHTML = '<span class="coin-burst-icon">&#127853;</span> +' + amount;
+    container.appendChild(anim);
+
+    setTimeout(() => {
+      if (anim.parentNode) anim.parentNode.removeChild(anim);
+    }, 900);
+  }
+
+  showAuraUpgrade(level) {
+    const container = document.getElementById('game-container');
+    if (!container) return;
+
+    const popup = document.createElement('div');
+    popup.className = 'aura-upgrade-popup';
+    const labels = { 1: 'FLOW LEVEL 1', 2: 'FLOW LEVEL 2', 3: 'FLOW LEVEL 3', 4: 'FLOW LEVEL 4', 5: 'FLOW LEVEL 5' };
+    popup.textContent = labels[level] || ('FLOW LEVEL ' + level);
+    container.appendChild(popup);
+    setTimeout(() => {
+      if (popup.parentNode) popup.parentNode.removeChild(popup);
+    }, 1500);
+  }
+
+  resetCoinDisplay() {
+    if (this.elements.coinValue) {
+      this.elements.coinValue.textContent = '0';
+    }
   }
 
   updateStreakProgress(streak) {

@@ -432,6 +432,91 @@ html, body {
   100% { opacity: 0; transform: translate(-50%, -80%) scale(1); }
 }
 
+/* Coin Display */
+#coin-display {
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 14px;
+  padding: 8px 16px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  min-width: 80px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#coin-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffd700, #daa520);
+  border: 2px solid #b8860b;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+}
+
+#coin-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffd700;
+  text-shadow: 0 0 8px rgba(255, 215, 0, 0.4);
+}
+
+/* Coin burst animation */
+.coin-burst {
+  position: fixed;
+  top: 35%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffd700;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.7);
+  pointer-events: none;
+  animation: coinBurst 0.9s ease-out forwards;
+  z-index: 55;
+  will-change: transform, opacity;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.coin-burst-icon {
+  font-size: 18px;
+}
+
+@keyframes coinBurst {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(0.6); }
+  20% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
+  100% { opacity: 0; transform: translate(-50%, -130%) scale(1); }
+}
+
+/* Aura upgrade popup */
+.aura-upgrade-popup {
+  position: fixed;
+  top: 30%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 40px;
+  font-weight: 900;
+  color: #ff6600;
+  text-shadow: 0 0 30px rgba(255, 102, 0, 0.8), 0 0 60px rgba(255, 80, 0, 0.4);
+  pointer-events: none;
+  animation: auraUpgrade 1.8s ease-out forwards;
+  z-index: 55;
+  will-change: transform, opacity;
+  letter-spacing: 3px;
+}
+
+@keyframes auraUpgrade {
+  0% { opacity: 0; transform: translateX(-50%) translateY(20px) scale(0.7); }
+  15% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1.1); }
+  40% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(-40px) scale(1); }
+}
+
 /* Rival encounter popup */
 .rival-popup {
   position: fixed;
