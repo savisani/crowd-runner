@@ -123,16 +123,29 @@ export class Game {
   }
 
   start() {
-    this.audio.init();
-    this.audio.startMusic();
+    console.log('[START] start() called, state=' + this.state);
+    if (this.state !== 'menu') return;
+
+    this.state = 'playing';
+    this.lastTime = performance.now();
+
     this.ui.hideStartScreen();
     this.ui.showHUD();
     this.ui.updateShapeIndicator(this.player.currentShape);
-    this.state = 'playing';
-    this.lastTime = performance.now();
+
+    try {
+      this.audio.init();
+      this.audio.startMusic();
+    } catch (e) {
+      console.warn('[START] Audio failed (non-fatal):', e);
+    }
+
+    console.log('[START] Game started successfully');
   }
 
   restart() {
+    if (this.state !== 'gameover') return;
+
     this.score = 0;
     this.streak = 0;
     this.bestStreak = 0;
@@ -159,8 +172,14 @@ export class Game {
     this.ui.updateCrowd(0);
     this.ui.updateCoins(0);
     this.ui.updateShapeIndicator(this.player.currentShape);
+
+    try {
+      this.audio.startMusic();
+    } catch (e) {
+      console.warn('Music restart failed:', e);
+    }
+
     this.state = 'playing';
-    this.audio.startMusic();
     this.lastTime = performance.now();
   }
 

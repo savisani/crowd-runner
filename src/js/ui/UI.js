@@ -387,10 +387,6 @@ export class UI {
 
   onStart(callback) {
     this.elements.startBtn.addEventListener('click', callback);
-    this.elements.startBtn.addEventListener('touchend', (e) => {
-      e.preventDefault();
-      callback();
-    });
   }
 
   onRestart(callback) {

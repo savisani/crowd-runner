@@ -16,10 +16,8 @@ export class Audio {
     try {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.initialized = true;
-      // Create a gain node for music volume control
       this.musicGain = this.ctx.createGain();
       this.musicGain.connect(this.ctx.destination);
-      // Generate a simple music buffer (2 seconds of a repeating melody)
       this._generateMusicBuffer();
     } catch (e) {
       this.enabled = false;

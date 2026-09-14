@@ -91,6 +91,29 @@
     </div>
   </div>
 
+  <script>
+    // INLINE DIAGNOSTIC — runs before module scripts
+    (function() {
+      console.log('[DIAG] Inline script running');
+      var btn = document.getElementById('start-btn');
+      var screen = document.getElementById('start-screen');
+      var canvas = document.getElementById('game-canvas');
+      console.log('[DIAG] start-btn:', !!btn, 'start-screen:', !!screen, 'canvas:', !!canvas);
+      if (btn) {
+        btn.addEventListener('click', function() {
+          console.log('[DIAG] DIRECT CLICK on start-btn WORKS');
+        });
+      }
+      if (screen) {
+        var rect = screen.getBoundingClientRect();
+        console.log('[DIAG] start-screen rect:', JSON.stringify({t:rect.top,l:rect.left,w:rect.width,h:rect.height}));
+      }
+      if (btn) {
+        var rect = btn.getBoundingClientRect();
+        console.log('[DIAG] start-btn rect:', JSON.stringify({t:rect.top,l:rect.left,w:rect.width,h:rect.height}));
+      }
+    })();
+  </script>
   <script type="module" src="/src/main.js"></script>
 </body>
 </html>
