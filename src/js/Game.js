@@ -75,7 +75,6 @@ export class Game {
     this.collision = new Collision(this.spawner, this.player, this.crowd);
 
     this._bindInput();
-    this._bindUI();
     this.ui.showStartScreen();
   }
 
@@ -117,13 +116,7 @@ export class Game {
     });
   }
 
-  _bindUI() {
-    this.ui.onStart(() => this.start());
-    this.ui.onRestart(() => this.restart());
-  }
-
   start() {
-    console.log('[START] start() called, state=' + this.state);
     if (this.state !== 'menu') return;
 
     this.state = 'playing';
@@ -137,10 +130,8 @@ export class Game {
       this.audio.init();
       this.audio.startMusic();
     } catch (e) {
-      console.warn('[START] Audio failed (non-fatal):', e);
+      console.warn('Audio failed (non-fatal):', e);
     }
-
-    console.log('[START] Game started successfully');
   }
 
   restart() {

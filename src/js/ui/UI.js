@@ -385,10 +385,6 @@ export class UI {
     this.debugEl.textContent = text;
   }
 
-  onStart(callback) {
-    this.elements.startBtn.addEventListener('click', callback);
-  }
-
   onRestart(callback) {
     this.elements.restartBtn.addEventListener('click', callback);
     this.elements.restartBtn.addEventListener('touchend', (e) => {
